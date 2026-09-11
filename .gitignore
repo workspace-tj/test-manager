@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.DS_Store
+test-manager-site/
+.pnpm-store/
+.claude/
+
+# Local research and product-specific investigation notes are not published.
+comment-format-draft.md
+comment-layout-comparison.md
+conventions-draft.md
+cross-layer-comparison.md
+id-change-control-draft.md
+implementation-plan.md
+knowledge-example.md
+limited-adoption.md
+placement-findings.md
+result-id-findings.md
+source-model-draft.md
+unit-comparison.md
+storybook-id-probe/

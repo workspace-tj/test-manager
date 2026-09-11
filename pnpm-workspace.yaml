@@ -1,0 +1,9 @@
+allowBuilds:
+  esbuild: true
+pmOnFail: ignore
+minimumReleaseAgeExclude:
+  - '@babel/generator@8.0.5'
+  - '@babel/parser@8.0.5'
+  - '@babel/traverse@8.0.5'
+  - '@babel/types@8.0.5'
+  - zod@4.6.2

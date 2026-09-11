@@ -1,0 +1,11 @@
+version: 1
+idPattern: "^[a-z-]+$"
+unexpected: rejected
+discovery:
+  documents: ["**/*.md"]
+  manualCases: []
+  sources: []
+documents:
+  kinds: {}
+case:
+  fields: {}
