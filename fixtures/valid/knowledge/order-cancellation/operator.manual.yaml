@@ -1,0 +1,10 @@
+id: CASE-101
+title: 担当者は出荷済み注文を手動で取り消さない
+owner: order-cancellation
+refs: [cancellation-eligibility]
+role: product
+impact: 3
+conditions: [注文は出荷済み]
+steps:
+  - action: 出荷済み注文の取消画面を開く
+    expected: 取消操作が利用できない

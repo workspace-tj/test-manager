@@ -1,0 +1,252 @@
+import { cp, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { runInNewContext } from 'node:vm';
+import { describe, expect, it } from 'vitest';
+import { checkProject } from './catalog.js';
+import { renderSite, writeSite } from './site.js';
+
+const fixture = path.resolve('fixtures/valid');
+
+describe('project catalog', () => {
+  it('loads documents, a one-file manual case, Vitest, Playwright, and Storybook without executing source', async () => {
+    const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.catalog.documents.map((item) => item.id)).toEqual(['catalog', 'cancellation-eligibility', 'order-cancellation', 'orders']);
+    expect(result.catalog.documents.find((item) => item.id === 'orders')?.refs).toEqual(['catalog']);
+    expect(result.catalog.cases.map((item) => [item.id, item.source, item.status])).toEqual([
+      ['CASE-101', 'manual', 'active'],
+      ['CASE-001', 'vitest', 'active'],
+      ['CASE-002', 'vitest', 'active'],
+      ['CASE-003', 'vitest', 'todo'],
+      ['CASE-201', 'playwright', 'active'],
+      ['CASE-301', 'storybook', 'skip'],
+    ]);
+    const eachCase = result.catalog.cases.find((item) => item.id === 'CASE-002');
+    expect(eachCase?.source === 'vitest' ? eachCase.parameters : undefined).toEqual([[0, false], [1, true]]);
+  });
+
+  it('checks and renders a second project vocabulary end to end', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-alternate-project-'));
+    const config = (await readFile(path.resolve('fixtures/alternate-rules.yaml'), 'utf8'))
+      .replace('fixtures/none/**/*.md', 'knowledge/**/*.md')
+      .replace('manualCases: []', 'manualCases: ["knowledge/**/*.manual.yaml"]');
+    await import('node:fs/promises').then(({ mkdir }) => mkdir(path.join(root, 'knowledge'), { recursive: true }));
+    await writeFile(path.join(root, 'test-manager.yaml'), config, 'utf8');
+    await writeFile(path.join(root, 'knowledge/module.md'), `---\nid: MOD-1\nkind: module\ntitle: Module\n---\n`, 'utf8');
+    await writeFile(path.join(root, 'knowledge/case.manual.yaml'), `id: CASE-1\ntitle: alternate\nowner: MOD-1\nrole: contract\nimpact: 20\nsteps:\n  - action: act\n    expected: done\n`, 'utf8');
+    const result = await checkProject(path.join(root, 'test-manager.yaml'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(renderSite(result.catalog).get('index.html')).toContain('>20<');
+  });
+
+  it('reports missing owner and does not inherit it from a parent or path', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-invalid-'));
+    await cp(fixture, root, { recursive: true });
+    const file = path.join(root, 'src/cancel.test.ts');
+    await writeFile(file, (await readFile(file, 'utf8')).replaceAll('owner: order-cancellation\n', ''), 'utf8');
+    const result = await checkProject(path.join(root, 'test-manager.yaml'));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics.some((item) => item.code === 'TM121' && item.subject === 'owner')).toBe(true);
+  });
+
+  it('detects self-reference, multi-node cycles, broken refs, wrong parent kinds, and duplicate IDs', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-graph-'));
+    await cp(fixture, root, { recursive: true });
+    await writeFile(path.join(root, 'knowledge/orders.md'), `---\nid: orders\nkind: area\ntitle: 受注\nparent: order-cancellation\n---\n`, 'utf8');
+    await writeFile(path.join(root, 'knowledge/catalog.md'), `---\nid: catalog\nkind: area\ntitle: 商品\nparent: catalog\nrefs: [missing-document]\n---\n`, 'utf8');
+    await writeFile(path.join(root, 'knowledge/duplicate.md'), `---\nid: orders\nkind: area\ntitle: 重複\n---\n`, 'utf8');
+    await writeFile(path.join(root, 'knowledge/order-cancellation/eligibility.md'), `---\nid: cancellation-eligibility\nkind: specification\ntitle: 条件\nparent: cancellation-eligibility\n---\n`, 'utf8');
+    const result = await checkProject(path.join(root, 'test-manager.yaml'));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const codes = new Set(result.diagnostics.map((item) => item.code));
+    expect(codes.has('TM110')).toBe(true);
+    expect(codes.has('TM113')).toBe(true);
+    expect(codes.has('TM114')).toBe(true);
+    expect(codes.has('TM115')).toBe(true);
+    expect(result.diagnostics.some((item) => item.code === 'TM113' && item.location.file === 'knowledge/order-cancellation/eligibility.md' && item.location.line === 5)).toBe(true);
+    expect(result.diagnostics.some((item) => item.code === 'TM115' && item.location.file === 'knowledge/catalog.md' && item.location.line === 6)).toBe(true);
+  });
+
+  it('detects a duplicate case ID across runners', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-duplicate-runner-'));
+    await cp(fixture, root, { recursive: true });
+    const file = path.join(root, 'journeys/cancellation.spec.ts');
+    await writeFile(file, (await readFile(file, 'utf8')).replace('CASE-201', 'CASE-001'), 'utf8');
+    const result = await checkProject(path.join(root, 'test-manager.yaml'));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics.some((item) => item.code === 'TM140' && item.subject === 'CASE-001')).toBe(true);
+  });
+
+  it('fails when a configured discovery pattern matches no files', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-empty-discovery-'));
+    await cp(fixture, root, { recursive: true });
+    const config = path.join(root, 'test-manager.yaml');
+    await writeFile(config, (await readFile(config, 'utf8')).replace('src/**/*.test.ts', 'src/**/*.tset.ts'), 'utf8');
+    const result = await checkProject(config);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics.some((item) => item.code === 'TM011' && item.subject === 'src/**/*.tset.ts')).toBe(true);
+  });
+
+  it('detects discovery overlap and document/case ID collisions', async () => {
+    const overlapRoot = await mkdtemp(path.join(tmpdir(), 'test-manager-overlap-'));
+    await cp(fixture, overlapRoot, { recursive: true });
+    const overlapConfig = path.join(overlapRoot, 'test-manager.yaml');
+    await writeFile(overlapConfig, (await readFile(overlapConfig, 'utf8')).replace('paths: ["src/**/*.test.ts"]', 'paths: ["knowledge/**/*.manual.yaml", "src/**/*.test.ts"]'), 'utf8');
+    const overlap = await checkProject(overlapConfig);
+    expect(overlap.ok).toBe(false);
+    if (!overlap.ok) expect(overlap.diagnostics.some((item) => item.code === 'TM010')).toBe(true);
+
+    const sameGroupRoot = await mkdtemp(path.join(tmpdir(), 'test-manager-same-group-overlap-'));
+    await cp(fixture, sameGroupRoot, { recursive: true });
+    const sameGroupConfig = path.join(sameGroupRoot, 'test-manager.yaml');
+    await writeFile(sameGroupConfig, (await readFile(sameGroupConfig, 'utf8')).replace('paths: ["src/**/*.test.ts"]', 'paths: ["src/**/*.test.ts", "src/cancel.test.ts"]'), 'utf8');
+    const sameGroup = await checkProject(sameGroupConfig);
+    expect(sameGroup.ok).toBe(false);
+    if (!sameGroup.ok) expect(sameGroup.diagnostics.some((item) => item.code === 'TM010' && item.reason.includes('src/cancel.test.ts'))).toBe(true);
+
+    const collisionRoot = await mkdtemp(path.join(tmpdir(), 'test-manager-id-collision-'));
+    await cp(fixture, collisionRoot, { recursive: true });
+    const manual = path.join(collisionRoot, 'knowledge/order-cancellation/operator.manual.yaml');
+    await writeFile(manual, (await readFile(manual, 'utf8')).replace('CASE-101', 'orders'), 'utf8');
+    const collision = await checkProject(path.join(collisionRoot, 'test-manager.yaml'));
+    expect(collision.ok).toBe(false);
+    if (!collision.ok) expect(collision.diagnostics.some((item) => item.code === 'TM141')).toBe(true);
+  });
+
+  it('rejects duplicate YAML keys, unknown keys, coercion, broken refs, and duplicate case IDs', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-strict-'));
+    await cp(fixture, root, { recursive: true });
+    await writeFile(path.join(root, 'knowledge/order-cancellation/operator.manual.yaml'), `id: CASE-001\ntitle: duplicate\nowner: missing\nrole: product\nimpact: "3"\nimpact: 3\nunknown: x\nsteps:\n  - action: a\n    expected: e\n`, 'utf8');
+    const result = await checkProject(path.join(root, 'test-manager.yaml'));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics.some((item) => item.code === 'TM001')).toBe(true);
+  });
+
+  it('reports independent strict manual violations after YAML parsing succeeds', async () => {
+    const variants = [
+      ['unknown', 'unknown: x\n', 'TM120'],
+      ['wrong-type', 'impact: "3"\n', 'TM122'],
+      ['broken-ref', 'owner: missing\n', 'TM126'],
+    ] as const;
+    for (const [name, replacement, code] of variants) {
+      const root = await mkdtemp(path.join(tmpdir(), `test-manager-${name}-`));
+      await cp(fixture, root, { recursive: true });
+      const file = path.join(root, 'knowledge/order-cancellation/operator.manual.yaml');
+      const source = await readFile(file, 'utf8');
+      const changed = name === 'unknown' ? `${source}${replacement}` : name === 'wrong-type' ? source.replace('impact: 3\n', replacement) : source.replace('owner: order-cancellation\n', replacement);
+      await writeFile(file, changed, 'utf8');
+      const result = await checkProject(path.join(root, 'test-manager.yaml'));
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.diagnostics.some((item) => item.code === code)).toBe(true);
+    }
+  });
+
+  it('reports frontmatter field errors at the actual field line', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-document-line-'));
+    await cp(fixture, root, { recursive: true });
+    const file = path.join(root, 'knowledge/orders.md');
+    await writeFile(file, `---\nid: orders\nkind: area\ntitle: ""\n---\n`, 'utf8');
+    const result = await checkProject(path.join(root, 'test-manager.yaml'));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics.some((item) => item.code === 'TM105' && item.location.line === 4)).toBe(true);
+  });
+
+  it('renders deterministic, escaped output with separate Story IDs and names', async () => {
+    const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const first = renderSite(result.catalog);
+    const second = renderSite(result.catalog);
+    expect([...first]).toEqual([...second]);
+    expect(first.get('index.html')).toContain('href="cases/CASE-001.html"');
+    expect(first.get('index.html')).not.toContain('href="../cases/');
+    expect(first.get('index.html')).toContain('id="source-filter"');
+    expect(first.get('index.html')).toContain('id="status-filter"');
+    expect(first.get('index.html')).toContain('id="role-filter"');
+    expect(first.get('index.html')).toContain('id="impact-filter"');
+    expect(first.get('cases/CASE-301.html')).toContain('<code>CASE-301</code>');
+    expect(first.get('cases/CASE-301.html')).toContain('<h1>出荷済み注文では取消ボタンを無効表示する</h1>');
+    expect(first.get('documents/cancellation-eligibility.html')).toContain('判断の理由');
+    expect(first.get('documents/cancellation-eligibility.html')).toContain('&lt;script&gt;');
+    expect(first.get('documents/cancellation-eligibility.html')).not.toContain("<script>alert('not executed')</script>");
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-build-'));
+    const out = path.join(root, 'site');
+    await writeSite(result.catalog, out);
+    const one = await readFile(path.join(out, 'catalog.json'), 'utf8');
+    await writeSite(result.catalog, out);
+    expect(await readFile(path.join(out, 'catalog.json'), 'utf8')).toBe(one);
+  });
+
+  it('keeps every generated relative link resolvable and the entire disk tree deterministic', async () => {
+    const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-tree-'));
+    const out = path.join(root, 'site');
+    await writeSite(result.catalog, out);
+    const snapshot = async (): Promise<ReadonlyArray<readonly [string, string]>> => {
+      const walk = async (directory: string): Promise<string[]> => (await Promise.all((await readdir(directory, { withFileTypes: true })).map(async (entry) => entry.isDirectory() ? walk(path.join(directory, entry.name)) : [path.relative(out, path.join(directory, entry.name))]))).flat().sort();
+      const names = await walk(out);
+      return Promise.all(names.map(async (name) => [name, await readFile(path.join(out, name), 'utf8')] as const));
+    };
+    const first = await snapshot();
+    for (const [name, content] of first.filter(([name]) => name.endsWith('.html'))) {
+      for (const match of content.matchAll(/href="([^"]+)"/gu)) {
+        const href = match[1];
+        if (!href || /^(?:https?:|#)/u.test(href)) continue;
+        await expect(import('node:fs/promises').then(({ access }) => access(path.resolve(out, path.dirname(name), href)))).resolves.toBeUndefined();
+      }
+      expect(content).not.toContain(result.catalog.projectRoot);
+    }
+    await writeSite(result.catalog, out);
+    expect(await snapshot()).toEqual(first);
+  });
+
+  it('applies search and project-defined filters together in the generated browser script', async () => {
+    const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const files = renderSite(result.catalog);
+    const listeners = new Map<object, Record<string, () => void>>();
+    const control = (key?: string) => ({ value: '', dataset: key ? { filterKey: key } : {}, addEventListener(event: string, listener: () => void) { const own = listeners.get(this) ?? {}; own[event] = listener; listeners.set(this, own); } });
+    const search = control();
+    const source = control('source');
+    const role = control('role');
+    const rows = [
+      { hidden: false, dataset: { search: 'case-1 cancellation product', filters: JSON.stringify({ source: 'vitest', role: 'product' }) } },
+      { hidden: false, dataset: { search: 'case-2 calculation engineering', filters: JSON.stringify({ source: 'playwright', role: 'engineering' }) } },
+    ];
+    const document = { querySelector: (selector: string) => selector === '#search' ? search : undefined, querySelectorAll: (selector: string) => selector === '[data-filter-key]' ? [source, role] : rows };
+    runInNewContext(files.get('assets/search.js') ?? '', { document, JSON, String });
+    search.value = 'case'; source.value = 'vitest'; role.value = 'product';
+    listeners.get(role)?.change?.();
+    expect(rows.map((row) => row.hidden)).toEqual([false, true]);
+    search.value = 'calculation'; source.value = ''; role.value = '';
+    listeners.get(search)?.input?.();
+    expect(rows.map((row) => row.hidden)).toEqual([true, false]);
+  });
+
+  it('refuses unsafe output targets and directories without its exact marker', async () => {
+    const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    await expect(writeSite(result.catalog, result.catalog.projectRoot)).rejects.toThrow('project root');
+    await expect(writeSite(result.catalog, path.dirname(result.catalog.projectRoot))).rejects.toThrow('ancestor');
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-output-safety-'));
+    const unowned = path.join(root, 'unowned');
+    await cp(fixture, unowned, { recursive: true });
+    await expect(writeSite(result.catalog, unowned)).rejects.toThrow('not created by test-manager');
+    const wrongMarker = path.join(root, 'wrong-marker');
+    await cp(fixture, wrongMarker, { recursive: true });
+    await writeFile(path.join(wrongMarker, '.test-manager-output'), 'v2\n', 'utf8');
+    await expect(writeSite(result.catalog, wrongMarker)).rejects.toThrow('not created by test-manager');
+  });
+});

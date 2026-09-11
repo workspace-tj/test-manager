@@ -1,0 +1,41 @@
+version: 1
+idPattern: "^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$"
+discovery:
+  documents: ["knowledge/**/*.md"]
+  manualCases: ["knowledge/**/*.manual.yaml"]
+  sources:
+    - kind: vitest
+      paths: ["src/**/*.test.ts"]
+    - kind: playwright
+      paths: ["journeys/**/*.spec.ts"]
+    - kind: storybook
+      paths: ["src/**/*.stories.tsx"]
+documents:
+  kinds:
+    area:
+      description: 知識とテストを管理する領域
+      parent: { required: false, targetKinds: [area] }
+    specification:
+      description: 判断と振る舞い
+      parent: { required: true, targetKinds: [area] }
+case:
+  fields:
+    owner: { required: true, placement: classification, type: reference, targetKinds: [area] }
+    refs: { required: false, placement: classification, type: reference-list, minItems: 1, uniqueItems: true, targetKinds: [area, specification] }
+    role:
+      required: true
+      placement: classification
+      type: enum
+      values:
+        product: { description: プロダクトの振る舞い }
+        engineering: { description: 技術的な契約 }
+    impact:
+      required: true
+      placement: classification
+      type: integer-enum
+      values:
+        1: { description: 限定的な不便 }
+        2: { description: 主要操作に支障 }
+        3: { description: 主要業務が成立しない }
+    conditions: { required: false, placement: detail, type: text-list, minItems: 1 }
+    reason: { required: false, placement: detail, type: text }

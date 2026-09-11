@@ -1,0 +1,27 @@
+version: 1
+idPattern: "^[A-Z]+-[0-9]+$"
+discovery:
+  documents: ["fixtures/none/**/*.md"]
+  manualCases: []
+  sources: []
+documents:
+  kinds:
+    module:
+      description: module
+      parent: { required: false, targetKinds: [module] }
+case:
+  fields:
+    owner: { required: true, placement: classification, type: reference, targetKinds: [module] }
+    role:
+      required: true
+      placement: classification
+      type: enum
+      values:
+        contract: { description: contract }
+    impact:
+      required: true
+      placement: classification
+      type: integer-enum
+      values:
+        10: { description: low }
+        20: { description: high }
