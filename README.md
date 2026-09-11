@@ -1,34 +1,250 @@
 # test-manager
 
-プロジェクト定義の知識文書、手動ケース、Vitest、Playwright、Storybook を実行せずに静的解析し、参照整合性を検査して閲覧用サイトを生成する独立 CLI です。
+テストコード、手動テスト、知識文書を、実行せずに一つのカタログへまとめる CLI です。
+
+プロジェクト内に散らばった Vitest、Playwright、Storybook、手動ケースを静的解析し、「このテストはどの仕様に属するか」「参照先が消えていないか」「必要な分類が記録されているか」を検査します。検査済みの情報から、検索・絞り込み可能な静的サイトも生成できます。
+
+![生成されたテスト知識カタログの一覧画面](docs/assets/test-knowledge-catalog.png)
+
+test-manager はテストランナーではありません。テストの成功・失敗やカバレッジは収集せず、テスト定義と、その背景にある知識の構造を管理します。
+
+## 想定する使い方
+
+たとえば、ある仕様に対して単体テスト、E2E、Storybook、手動確認が存在するとします。それぞれへ同じ `owner` と固有のケース ID を付けると、test-manager は次を行います。
+
+1. 設定した glob から知識文書とテスト定義を探す
+2. ソースコードを実行せず、対応する宣言だけを AST で読み取る
+3. ID の重複、参照切れ、親子関係、必須項目、分類語彙を検査する
+4. 知識文書と全テストケースを横断できる静的サイトと `catalog.json` を生成する
+
+CI では `check` を実行して、不整合のある変更を検出できます。人が仕様やテストを調べるときは、`build` したサイトから、領域・情報源・状態・プロジェクト独自の分類でケースを探せます。
+
+## 試す
+
+現在はリポジトリから実行します。
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
+
 node dist/cli.js check --config fixtures/valid/test-manager.yaml
-node dist/cli.js build --config fixtures/valid/test-manager.yaml --out /tmp/test-manager-site
+node dist/cli.js build \
+  --config fixtures/valid/test-manager.yaml \
+  --out /tmp/test-manager-site
 ```
 
-設定パスは設定ファイルのディレクトリ基準です。`check` は診断があれば終了コード 1、CLI の使い方が不正なら 2 を返します。`build` は検証成功後だけ出力し、既存ディレクトリは test-manager の marker がある場合だけ置換します。生成物に日時や絶対パスを含めません。
+`check` は検査成功時に `0`、診断がある場合に `1`、CLI の使い方が不正な場合に `2` を返します。`build` は検査成功後だけ出力します。
 
-## v1 の記述規約
+## プロジェクトへ設定する
 
-- 文書: Markdown 先頭の厳密な YAML frontmatter に `id`, `kind`, `title`, 任意の単一 `parent` と関連文書 `refs`。`refs` の相互参照は親循環とは別です。本文の raw HTML は実行せず文字として表示します。
-- 手動: 1 YAML ファイルに 1 ケース。`id`, `title`, `steps: [{ action, expected }]` とプロジェクト定義フィールドを記述します。結果欄はありません。
-- Vitest: `it` / `test`（`skip`, `todo`, inline literal `each` を含む）の直前に `@case`、宣言 options の `meta.caseId` に ID、callback 冒頭の任意 `@case-doc` に条件・理由を書きます。
-- Playwright: 直前 `@case` と、宣言 options の `annotation: { type: 'case-id', description: 'CASE-ID' }` を使います。`skip` / `fixme` は定義状態として表示し、成功とは扱いません。
-- Storybook: export の直前に `@case`、明示 `name: '[CASE-ID] 表示名'` を使います。補足は object の最初の property 直前の `@case-doc` に置きます。Story の状態から別ケースや成功結果は生成しません。
+プロジェクトのルートなどに `test-manager.yaml` を作ります。glob の基準は、この設定ファイルが置かれたディレクトリです。
 
-`@case` は owner・refs・分類、`@case-doc` は必要な conditions・reason の記録場所です。通常コメントは抽出しません。親・パス・describe から値を継承しません。一宣言一ケース ID で、literal `each` の行は入力違いとして保持しつつ一ケースです。
+```yaml
+version: 1
+idPattern: "^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$"
 
-ケースフィールド規則は `placement: classification | detail`、`required`、`requiredWhen: { field, equals }`、型、列挙値、参照先 kind、最小件数、一意性だけを扱います。フィールド名を生成器へハードコードせず、`@case` と `@case-doc` の配置および絞り込み項目を規則から導出します。任意コードや緩和スイッチはありません。
+discovery:
+  documents: ["knowledge/**/*.md"]
+  manualCases: ["knowledge/**/*.manual.yaml"]
+  sources:
+    - kind: vitest
+      paths: ["src/**/*.test.ts"]
+    - kind: playwright
+      paths: ["journeys/**/*.spec.ts"]
+    - kind: storybook
+      paths: ["src/**/*.stories.tsx"]
+
+documents:
+  kinds:
+    area:
+      description: 知識とテストを管理する領域
+      parent: { required: false, targetKinds: [area] }
+    specification:
+      description: 判断や制約を記録する仕様
+      parent: { required: true, targetKinds: [area] }
+
+case:
+  fields:
+    owner:
+      type: reference
+      targetKinds: [area]
+      placement: classification
+      required: true
+    refs:
+      type: reference-list
+      targetKinds: [specification]
+      placement: classification
+      required: false
+      uniqueItems: true
+    impact:
+      type: integer-enum
+      placement: classification
+      required: true
+      values:
+        1: { description: 影響が限定的 }
+        2: { description: 主要操作に影響する }
+        3: { description: 主要な利用目的を阻害する }
+    reason:
+      type: text
+      placement: detail
+      required: false
+```
+
+### discovery
+
+どのファイルを読み取るかを指定します。
+
+- `documents`: YAML frontmatter を持つ Markdown
+- `manualCases`: 1 ファイルに 1 ケースを記述した YAML
+- `sources`: `vitest`、`playwright`、`storybook` と、それぞれの glob
+
+設定した glob が 1 件も見つからない場合や、一つのファイルが複数の設定に重複して一致した場合は診断します。
+
+### documents.kinds
+
+知識文書の種類と、許可する親子関係を定義します。`parent.required` で親の必須性を、`targetKinds` で親として許可する種類を指定します。
+
+### case.fields
+
+プロジェクトで各ケースに記録する項目を定義します。フィールド名は固定されていませんが、`owner` は必須の参照項目です。
+
+利用できる型は `reference`、`reference-list`、`enum`、`integer-enum`、`text`、`text-list` です。`required`、条件付き必須の `requiredWhen`、`minItems`、`uniqueItems` も設定できます。
+
+`placement` は記述場所とサイト上での扱いを決めます。
+
+- `classification`: `@case` に記述し、一覧の絞り込みに使う項目
+- `detail`: `@case-doc` に記述する条件や理由などの詳細
+
+設定に未知のキー、矛盾した必須条件、存在しない文書 kind への参照がある場合は、起動時に拒否します。
+
+## 知識とケースを記述する
+
+### 知識文書
+
+Markdown 先頭の YAML frontmatter に、ID、種類、タイトル、任意の親と関連文書を記述します。
+
+```md
+---
+id: order-cancellation
+kind: area
+title: 注文キャンセル
+---
+
+注文キャンセルに関する判断と制約を管理します。
+```
+
+文書 ID の重複、存在しない親・関連文書、許可されていない親 kind、親関係の循環を検出します。
+
+### Vitest
+
+`@case` をテスト宣言の直前に置き、ケース ID を `meta.caseId` に記述します。条件や理由が必要なら、callback 冒頭の `@case-doc` に記述します。
+
+```ts
+/**
+ * @case
+ * owner: order-cancellation
+ * refs: [cancellation-policy]
+ * impact: 3
+ */
+it(
+  '期限を過ぎた注文をキャンセルできない',
+  { meta: { caseId: 'CASE-001' } },
+  () => {
+    /**
+     * @case-doc
+     * reason: 確定済みの出荷処理と矛盾させないため
+     */
+    // test body
+  },
+);
+```
+
+プロジェクトで `meta.caseId` を型安全に使う場合は、Vitest の metadata を拡張します。
+
+```ts
+import '@vitest/runner';
+
+declare module '@vitest/runner' {
+  interface TaskMeta {
+    caseId?: string;
+  }
+}
+```
+
+### Playwright
+
+ケース ID は `case-id` annotation に記述します。
+
+```ts
+/**
+ * @case
+ * owner: order-cancellation
+ * impact: 3
+ */
+test(
+  '期限切れの表示ではキャンセル操作が無効になる',
+  {
+    annotation: { type: 'case-id', description: 'CASE-201' },
+  },
+  async () => {
+    // test body
+  },
+);
+```
+
+### Storybook
+
+Story の明示的な `name` の先頭へケース ID を入れます。
+
+```ts
+/**
+ * @case
+ * owner: order-cancellation
+ * impact: 2
+ */
+export const Disabled = {
+  name: '[CASE-301] キャンセルできない状態',
+};
+```
+
+### 手動ケース
+
+1 YAML ファイルに 1 ケースを記述します。`steps` は操作と期待結果の組です。
+
+```yaml
+id: CASE-101
+title: オペレーターが期限切れの注文をキャンセルできない
+owner: order-cancellation
+impact: 3
+steps:
+  - action: 期限切れの注文を開く
+    expected: キャンセル操作が無効である
+```
+
+実施結果の入力欄はありません。手動ケースも「何を確認するか」の定義として扱います。
+
+## CI で検査する
+
+依存関係のインストールとビルド後に `check` を実行します。
+
+```sh
+node dist/cli.js check --config ./test-manager.yaml
+```
+
+診断はファイル、行、列、診断コード、対象、理由を含みます。たとえば、ケースの owner が存在しない、ID が重複している、必須項目が欠けている、といった変更をマージ前に検出できます。
 
 ## 静的解析の対応境界
 
-対象は各ランナーから直接 import した標準宣言、静的文字列タイトル、オブジェクトリテラル options、inline 配列リテラルの `each`、object literal の Story です。動的タイトル・動的 each・独自 wrapper・外部データ生成は診断対象または対象外として明示され、任意 JavaScript を実行して発見しません。意味的な十分さ、コードと記述の一致、未記録の仕様は人がレビューします。
+対応するのは、各ランナーから直接 import した標準宣言、静的文字列タイトル、object literal の options、inline 配列リテラルの `each`、object literal の Story です。
 
-## AI 記述と人レビュー
+動的タイトル、動的 each、独自 wrapper、外部データからの生成、Story factory は、診断対象または対象外として明示します。対象ソースを実行して推測することはありません。
 
-AI は設定済み語彙だけを使い、owner を一つ明記し、関連がある場合だけ refs を追加します。impact は壊れた場合の影響であり実装優先度ではありません。人はケース名が確認内容を表すか、conditions / reason が必要十分か、Arrange / Assert と一致するかをレビューします。ツールはこれらの意味を推測しません。
+ツールが検査するのは構造的な整合性です。ケース名が確認内容を正しく表しているか、条件・理由が十分か、実装と記述が意味的に一致しているかは、人がレビューします。
 
-導入時は探索 glob が既存の Vitest / Playwright / Story を漏らさず、かつ一つのファイルが複数規則に重複しないことを先に確認してください。独自 wrapper、変数参照の each、Story factory は v1 では書き換えまたは対象外の明示が必要です。
+## 出力の安全性と再現性
+
+- Markdown 本文とソース断片は HTML として実行せず、エスケープして表示します
+- 生成物には生成日時や絶対パスを含めません
+- プロジェクトルートと、その祖先への出力を拒否します
+- test-manager の marker がない既存ディレクトリは置換しません
+- 同じ入力からは同じファイルツリーを生成します
