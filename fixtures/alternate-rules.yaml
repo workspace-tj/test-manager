@@ -11,7 +11,7 @@ documents:
       parent: { required: false, targetKinds: [module] }
 case:
   fields:
-    owner: { required: true, placement: classification, type: reference, targetKinds: [module] }
+    belongsTo: { required: true, placement: classification, type: reference, targetKinds: [module] }
     role:
       required: true
       placement: classification

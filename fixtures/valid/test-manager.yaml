@@ -12,16 +12,19 @@ discovery:
       paths: ["src/**/*.stories.tsx"]
 documents:
   kinds:
-    area:
-      description: 知識とテストを管理する領域
-      parent: { required: false, targetKinds: [area] }
-    specification:
-      description: 判断と振る舞い
-      parent: { required: true, targetKinds: [area] }
+    domain:
+      description: 業務領域
+      parent: { required: false, targetKinds: [] }
+    feature:
+      description: domainに属する機能
+      parent: { required: true, targetKinds: [domain] }
+    decision:
+      description: 判断と制約
+      parent: { required: true, targetKinds: [feature] }
 case:
   fields:
-    owner: { required: true, placement: classification, type: reference, targetKinds: [area] }
-    refs: { required: false, placement: classification, type: reference-list, minItems: 1, uniqueItems: true, targetKinds: [area, specification] }
+    belongsTo: { required: true, placement: classification, type: reference, targetKinds: [domain, feature] }
+    refs: { required: false, placement: classification, type: reference-list, minItems: 1, uniqueItems: true, targetKinds: [domain, feature, decision] }
     role:
       required: true
       placement: classification

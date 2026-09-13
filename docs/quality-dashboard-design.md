@@ -108,7 +108,7 @@ unit、integration、component、E2E、手動を別々の網羅性として評�
 - 所属別集計でケースを重複計上しない
 - 横断的な関連は `refs` で表す
 
-現行の `owner` は人の責任者と誤読されるため、所属を示す名前へ変更します。保存時は、domainとfeatureを重複記録せず、一つの所属参照からdomainを導出します。
+ケースの所属は `belongsTo` で表します。人の責任者と誤読される旧名 `owner` は受け付けません。保存時は、domainとfeatureを重複記録せず、一つの所属参照からdomainを導出します。
 
 ```yaml
 # feature固有のケース
@@ -251,7 +251,7 @@ sourceを横断したケース一覧
 | 画面の情報 | 現在の取得元 | 状態 |
 | --- | --- | --- |
 | case ID、title、source、定義状態 | `Catalog.cases` | 取得済み |
-| 所属、refs、分類、理由、条件 | `fields` / `details` | 取得済み。ただし所属の保存名はまだ `owner` |
+| 所属、refs、分類、理由、条件 | `fields` / `details` | 取得済み。所属は `belongsTo` |
 | domain・feature関係 | `Catalog.documents` の `kind` / `parent` | 取得済み。kind名はプロジェクト設定依存 |
 | domainの表示順 | 未定義 | 追加契約が必要 |
 | actual status、retry、duration | runner reporter | 未実装 |
@@ -261,7 +261,7 @@ sourceを横断したケース一覧
 | リリース区間のPRと宣言feature | 変更情報adapter | 未実装 |
 | ケースの追加・変更・削除 | 二つのcommitから生成したcatalog | 未実装 |
 
-`owner` から `belongsTo` への変更は実行結果取込と異なる変更理由を持つため、別のmigrationとして扱います。取込側は移行後の内部概念を「所属」として参照し、旧フィールド名を新しい実行結果形式へ持ち込みません。
+旧 `owner` から `belongsTo` へのmigrationは実行結果取込と分離して行いました。取込側は内部概念を「所属」として参照し、旧フィールド名を新しい実行結果形式へ持ち込みません。
 
 ### 収集単位
 
@@ -395,7 +395,7 @@ snippetや絶対パスなど、環境差で変わる値を意味的な変更判�
 
 ### 導入順
 
-1. `owner` を `belongsTo` へ移行し、domain・featureの不変条件と安定した表示順をcatalogで表現する
+1. domain・featureの不変条件と安定した表示順をcatalogで表現する
 2. 正規化形式のZod schemaと純粋なdaily view builderを実装する
 3. Vitest reporter adapterを実装し、fixture runから日次画面を生成する
 4. Playwright reporter adapterと複数unitのmergeを実装する

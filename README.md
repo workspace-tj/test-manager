@@ -16,7 +16,7 @@ test-manager はテストランナーではありません。テストの成功�
 
 ## 想定する使い方
 
-たとえば、ある仕様に対して単体テスト、E2E、Storybook、手動確認が存在するとします。それぞれへ同じ `owner` と固有のケース ID を付けると、test-manager は次を行います。
+たとえば、ある仕様に対して単体テスト、E2E、Storybook、手動確認が存在するとします。それぞれへ同じ `belongsTo` と固有のケース ID を付けると、test-manager は次を行います。
 
 1. 設定した glob から知識文書とテスト定義を探す
 2. ソースコードを実行せず、対応する宣言だけを AST で読み取る
@@ -62,23 +62,26 @@ discovery:
 
 documents:
   kinds:
-    area:
-      description: 知識とテストを管理する領域
-      parent: { required: false, targetKinds: [area] }
-    specification:
-      description: 判断や制約を記録する仕様
-      parent: { required: true, targetKinds: [area] }
+    domain:
+      description: 業務領域
+      parent: { required: false, targetKinds: [] }
+    feature:
+      description: domainに属する機能
+      parent: { required: true, targetKinds: [domain] }
+    decision:
+      description: 判断や制約
+      parent: { required: true, targetKinds: [feature] }
 
 case:
   fields:
-    owner:
+    belongsTo:
       type: reference
-      targetKinds: [area]
+      targetKinds: [domain, feature]
       placement: classification
       required: true
     refs:
       type: reference-list
-      targetKinds: [specification]
+      targetKinds: [domain, feature, decision]
       placement: classification
       required: false
       uniqueItems: true
@@ -112,7 +115,7 @@ case:
 
 ### case.fields
 
-プロジェクトで各ケースに記録する項目を定義します。フィールド名は固定されていませんが、`owner` は必須の参照項目です。
+プロジェクトで各ケースに記録する項目を定義します。フィールド名は固定されていませんが、`belongsTo` は必須の参照項目です。
 
 利用できる型は `reference`、`reference-list`、`enum`、`integer-enum`、`text`、`text-list` です。`required`、条件付き必須の `requiredWhen`、`minItems`、`uniqueItems` も設定できます。
 
@@ -132,8 +135,9 @@ Markdown 先頭の YAML frontmatter に、ID、種類、タイトル、任意の
 ```md
 ---
 id: order-cancellation
-kind: area
+kind: feature
 title: 注文キャンセル
+parent: orders
 ---
 
 注文キャンセルに関する判断と制約を管理します。
@@ -148,7 +152,7 @@ title: 注文キャンセル
 ```ts
 /**
  * @case
- * owner: order-cancellation
+ * belongsTo: order-cancellation
  * refs: [cancellation-policy]
  * impact: 3
  */
@@ -184,7 +188,7 @@ declare module '@vitest/runner' {
 ```ts
 /**
  * @case
- * owner: order-cancellation
+ * belongsTo: order-cancellation
  * impact: 3
  */
 test(
@@ -205,7 +209,7 @@ Story の明示的な `name` の先頭へケース ID を入れます。
 ```ts
 /**
  * @case
- * owner: order-cancellation
+ * belongsTo: order-cancellation
  * impact: 2
  */
 export const Disabled = {
@@ -220,7 +224,7 @@ export const Disabled = {
 ```yaml
 id: CASE-101
 title: オペレーターが期限切れの注文をキャンセルできない
-owner: order-cancellation
+belongsTo: order-cancellation
 impact: 3
 steps:
   - action: 期限切れの注文を開く
@@ -237,7 +241,7 @@ steps:
 node dist/cli.js check --config ./test-manager.yaml
 ```
 
-診断はファイル、行、列、診断コード、対象、理由を含みます。たとえば、ケースの owner が存在しない、ID が重複している、必須項目が欠けている、といった変更をマージ前に検出できます。
+診断はファイル、行、列、診断コード、対象、理由を含みます。たとえば、ケースの belongsTo が存在しない、ID が重複している、必須項目が欠けている、といった変更をマージ前に検出できます。
 
 ## 静的解析の対応境界
 

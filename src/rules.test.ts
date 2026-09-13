@@ -23,16 +23,16 @@ describe('project-defined vocabulary', () => {
     expect(result.diagnostics.some((item) => item.code === 'TM003' && item.subject === 'unexpected')).toBe(true);
   });
 
-  it('rejects a rule set that cannot produce the required owner invariant', async () => {
+  it('rejects a rule set that cannot produce the required membership invariant', async () => {
     const result = await loadRules(path.resolve('fixtures/invalid/test-manager.yaml'));
-    expect(result.diagnostics.some((item) => item.subject === 'case.fields.owner')).toBe(true);
+    expect(result.diagnostics.some((item) => item.subject === 'case.fields.belongsTo')).toBe(true);
   });
 
   it('supports project-defined conditional required fields', () => {
     const diagnostics = validateCaseFields(
-      { owner: 'area', role: 'product' },
+      { belongsTo: 'area', role: 'product' },
       {
-        owner: { required: true, placement: 'classification', type: 'reference', targetKinds: ['area'] },
+        belongsTo: { required: true, placement: 'classification', type: 'reference', targetKinds: ['area'] },
         role: { required: true, placement: 'classification', type: 'enum', values: { product: { description: 'product' } } },
         refs: { required: false, placement: 'classification', requiredWhen: { field: 'role', equals: 'product' }, type: 'reference-list', targetKinds: ['area'] },
       },
@@ -44,10 +44,10 @@ describe('project-defined vocabulary', () => {
   });
 
   it('distinguishes missing references from disallowed target kinds', () => {
-    const rule = { owner: { required: true, placement: 'classification' as const, type: 'reference' as const, targetKinds: ['area'] } };
+    const rule = { belongsTo: { required: true, placement: 'classification' as const, type: 'reference' as const, targetKinds: ['area'] } };
     const documents = [{ id: documentIdSchema(/.*/u).parse('spec'), kind: 'specification', title: 'Spec', body: '', location: { file: 'spec.md', line: 1, column: 1 } }];
-    expect(validateCaseFields({ owner: 'missing' }, rule, documents, 'case.ts').map((item) => item.code)).toEqual(['TM126']);
-    expect(validateCaseFields({ owner: 'spec' }, rule, documents, 'case.ts').map((item) => item.code)).toEqual(['TM127']);
+    expect(validateCaseFields({ belongsTo: 'missing' }, rule, documents, 'case.ts').map((item) => item.code)).toEqual(['TM126']);
+    expect(validateCaseFields({ belongsTo: 'spec' }, rule, documents, 'case.ts').map((item) => item.code)).toEqual(['TM127']);
   });
 
   it('rejects requiredWhen values that cannot match the target field', async () => {
@@ -66,5 +66,14 @@ describe('project-defined vocabulary', () => {
     const result = await loadRules(path.join(root, 'test-manager.yaml'));
     expect(result.rules).toBeUndefined();
     expect(result.diagnostics.some((item) => item.subject === 'case.fields.status')).toBe(true);
+  });
+
+  it('rejects the legacy owner field instead of giving membership two names', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-legacy-owner-'));
+    const source = await readFile(path.resolve('fixtures/valid/test-manager.yaml'), 'utf8');
+    await writeFile(path.join(root, 'test-manager.yaml'), `${source}\n    owner: { required: false, placement: classification, type: text }\n`, 'utf8');
+    const result = await loadRules(path.join(root, 'test-manager.yaml'));
+    expect(result.rules).toBeUndefined();
+    expect(result.diagnostics.some((item) => item.subject === 'case.fields.owner')).toBe(true);
   });
 });

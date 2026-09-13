@@ -1,6 +1,6 @@
 ---
 id: order-cancellation
-kind: area
+kind: feature
 title: 注文取消
 parent: orders
 ---

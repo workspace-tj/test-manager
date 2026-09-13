@@ -1,6 +1,6 @@
 ---
 id: orders
-kind: area
+kind: domain
 title: 受注
 refs: [catalog]
 ---

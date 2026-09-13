@@ -49,17 +49,17 @@ export const renderSite = (catalog: Catalog): ReadonlyMap<string, string> => {
   files.set('documents/index.html', shell('領域・仕様', '../', `<h1>領域・仕様</h1><ul>${documents.map((document) => `<li>${linkDocument(document)} <small>${escapeHtml(document.kind)}</small></li>`).join('')}</ul>`));
   files.set('cases/index.html', shell('ケース', '../', `<h1>ケース</h1><ul>${cases.map((item) => `<li>${linkCase(item)} <small>${escapeHtml(item.id)} / ${escapeHtml(item.source)} / ${escapeHtml(item.status)}</small></li>`).join('')}</ul>`));
   for (const document of documents) {
-    const owned = cases.filter((item) => item.fields.owner === document.id);
+    const belongingCases = cases.filter((item) => item.fields.belongsTo === document.id);
     const referenced = cases.filter((item) => Array.isArray(item.fields.refs) && item.fields.refs.includes(document.id));
     const crumb = breadcrumbs(document, byId).map((item) => item.id === document.id ? escapeHtml(item.title) : linkDocument(item, '../')).join(' › ');
     const relatedDocuments = (document.refs ?? []).flatMap((id) => {
       const related = byId.get(id);
       return related ? [related] : [];
     });
-    files.set(`documents/${safeName(document.id)}.html`, shell(document.title, '../', `<p>${crumb}</p><h1>${escapeHtml(document.title)}</h1><p><code>${escapeHtml(document.id)}</code> · ${escapeHtml(document.kind)}</p><article>${markdown(document.body)}</article><h2>関連文書</h2><ul>${relatedDocuments.map((item) => `<li>${linkDocument(item, '../')}</li>`).join('') || '<li>0件</li>'}</ul><h2>所属ケース</h2><ul>${owned.map((item) => `<li>${linkCase(item, '../')}</li>`).join('') || '<li>0件</li>'}</ul><h2>関連ケース</h2><ul>${referenced.map((item) => `<li>${linkCase(item, '../')}</li>`).join('') || '<li>0件</li>'}</ul><p>Source: <code>${escapeHtml(document.location.file)}</code></p>`));
+    files.set(`documents/${safeName(document.id)}.html`, shell(document.title, '../', `<p>${crumb}</p><h1>${escapeHtml(document.title)}</h1><p><code>${escapeHtml(document.id)}</code> · ${escapeHtml(document.kind)}</p><article>${markdown(document.body)}</article><h2>関連文書</h2><ul>${relatedDocuments.map((item) => `<li>${linkDocument(item, '../')}</li>`).join('') || '<li>0件</li>'}</ul><h2>所属ケース</h2><ul>${belongingCases.map((item) => `<li>${linkCase(item, '../')}</li>`).join('') || '<li>0件</li>'}</ul><h2>関連ケース</h2><ul>${referenced.map((item) => `<li>${linkCase(item, '../')}</li>`).join('') || '<li>0件</li>'}</ul><p>Source: <code>${escapeHtml(document.location.file)}</code></p>`));
   }
   for (const item of cases) {
-    const refs = [item.fields.owner, ...(item.fields.refs ?? [])];
+    const refs = [item.fields.belongsTo, ...(item.fields.refs ?? [])];
     const parameters = item.source === 'vitest' ? item.parameters : undefined;
     files.set(`cases/${safeName(item.id)}.html`, shell(item.title, '../', `<h1>${escapeHtml(item.title)}</h1><p><code>${escapeHtml(item.id)}</code> · ${escapeHtml(item.source)} · ${escapeHtml(item.status)}</p><h2>所属・分類</h2><pre>${pretty(item.fields)}</pre><h2>条件・理由</h2><pre>${pretty(item.details)}</pre>${item.procedure ? `<h2>操作と期待結果</h2><pre>${pretty(item.procedure)}</pre>` : ''}${parameters ? `<h2>each入力表</h2><pre>${pretty(parameters)}</pre>` : ''}<h2>関連知識</h2><ul>${refs.map((id) => { const document = byId.get(id); return document ? `<li>${linkDocument(document, '../')}</li>` : ''; }).join('')}</ul><h2>ソース</h2><p><code>${escapeHtml(item.location.file)}:${item.location.line}</code></p><pre>${escapeHtml(item.snippet)}</pre>`));
   }

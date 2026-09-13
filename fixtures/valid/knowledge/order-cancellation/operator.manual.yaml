@@ -1,6 +1,6 @@
 id: CASE-101
 title: 担当者は出荷済み注文を手動で取り消さない
-owner: order-cancellation
+belongsTo: order-cancellation
 refs: [cancellation-eligibility]
 role: product
 impact: 3

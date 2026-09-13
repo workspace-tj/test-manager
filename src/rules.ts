@@ -48,13 +48,13 @@ const RulesShape = z.object({
 }).strict();
 
 const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z.RefinementCtx): void => {
-  const reservedFields = new Set(['id', 'title', 'steps', 'source', 'status', 'details', 'procedure', 'parameters', 'location', 'snippet']);
+  const reservedFields = new Set(['id', 'title', 'steps', 'source', 'status', 'details', 'procedure', 'parameters', 'location', 'snippet', 'owner']);
   for (const name of Object.keys(rules.case.fields)) if (reservedFields.has(name)) context.addIssue({ code: 'custom', path: ['case', 'fields', name], message: `${name} is reserved by the case model` });
-  const owner = rules.case.fields.owner;
-  if (!owner || !owner.required || owner.type !== 'reference') {
-    context.addIssue({ code: 'custom', path: ['case', 'fields', 'owner'], message: 'owner must be a required reference field' });
+  const belongsTo = rules.case.fields.belongsTo;
+  if (!belongsTo || !belongsTo.required || belongsTo.type !== 'reference') {
+    context.addIssue({ code: 'custom', path: ['case', 'fields', 'belongsTo'], message: 'belongsTo must be a required reference field' });
   }
-  if (owner?.placement !== 'classification') context.addIssue({ code: 'custom', path: ['case', 'fields', 'owner', 'placement'], message: 'owner must be a classification field' });
+  if (belongsTo?.placement !== 'classification') context.addIssue({ code: 'custom', path: ['case', 'fields', 'belongsTo', 'placement'], message: 'belongsTo must be a classification field' });
   const refs = rules.case.fields.refs;
   if (refs && refs.type !== 'reference-list') context.addIssue({ code: 'custom', path: ['case', 'fields', 'refs'], message: 'refs must be a reference-list field' });
   if (refs?.placement === 'detail') context.addIssue({ code: 'custom', path: ['case', 'fields', 'refs', 'placement'], message: 'refs must be a classification field' });

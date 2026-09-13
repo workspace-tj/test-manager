@@ -67,7 +67,7 @@ export type KnowledgeDocument = Readonly<{
 }>;
 
 export type CaseSource = 'manual' | SourceKind;
-export type CaseFields = Readonly<{ owner: DocumentId; refs?: ReadonlyArray<DocumentId>; readonly [key: string]: unknown }>;
+export type CaseFields = Readonly<{ belongsTo: DocumentId; refs?: ReadonlyArray<DocumentId>; readonly [key: string]: unknown }>;
 type CaseBase = Readonly<{
   id: CaseId;
   title: string;

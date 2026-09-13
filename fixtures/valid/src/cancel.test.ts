@@ -4,7 +4,7 @@ throw new Error('静的抽出時に実行されてはいけない');
 
 /*
 @case
-owner: order-cancellation
+belongsTo: order-cancellation
 refs: [cancellation-eligibility]
 role: product
 impact: 3
@@ -22,7 +22,7 @@ it('出荷済みの注文は、取消期限内でも取り消せない', {
 
 /*
 @case
-owner: order-cancellation
+belongsTo: order-cancellation
 role: engineering
 impact: 2
 */
@@ -32,7 +32,7 @@ test.each([[0, false], [1, true]])('取消可能件数 %i を判定する', {
 
 /*
 @case
-owner: order-cancellation
+belongsTo: order-cancellation
 role: product
 impact: 1
 */

@@ -1,6 +1,6 @@
 ---
 id: cancellation-eligibility
-kind: specification
+kind: decision
 title: 取消可能条件
 parent: order-cancellation
 ---
