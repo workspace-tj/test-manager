@@ -24,7 +24,7 @@ const comparisonText: Readonly<Record<Extract<DailyView['comparison'], { state: 
 };
 
 const renderChanges = (view: DailyView): string => {
-  if (view.changes.length > 0) return `<ul class="grouped-list change-list">${view.changes.map((change) => `<li><span class="status-dot ${changeClass[change.kind]}" aria-hidden="true"></span><div class="row-copy"><h3>${escapeHtml(change.title)}</h3><p><code>${escapeHtml(change.caseId)}</code> · ${escapeHtml(change.domainId)}</p></div><span class="label ${changeClass[change.kind]}">${changeLabel[change.kind]}</span></li>`).join('')}</ul>`;
+  if (view.changes.length > 0) return `<ul class="grouped-list change-list">${view.changes.map((change) => `<li><span class="status-dot ${changeClass[change.kind]}" aria-hidden="true"></span><div class="row-copy"><h3>${escapeHtml(change.title)}</h3><p><code>${escapeHtml(change.caseId)}</code> · ${escapeHtml(change.domainId)}</p></div><div class="row-detail"><span class="label ${changeClass[change.kind]}">${changeLabel[change.kind]}</span></div></li>`).join('')}</ul>`;
   const message = view.comparison.state === 'available' ? '前回から状態が変わったケースはありません。' : comparisonText[view.comparison.reason];
   return `<p class="empty-state">${message}</p>`;
 };

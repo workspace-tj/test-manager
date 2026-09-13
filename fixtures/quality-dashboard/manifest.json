@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "runId": "daily-2026-09-13",
+  "attempt": 1,
+  "environment": "staging",
+  "commit": "7f3a12c",
+  "scopeId": "daily-all",
+  "startedAt": "2026-09-13T00:00:00Z",
+  "ciUrl": "https://example.com/actions/runs/daily-2026-09-13",
+  "units": [
+    { "unitId": "vitest-unit-node", "runner": "vitest", "layer": "unit", "target": "node", "plannedCaseIds": ["CASE-101", "CASE-102", "CASE-103", "CASE-104", "CASE-105"] },
+    { "unitId": "playwright-e2e-chromium", "runner": "playwright", "layer": "E2E", "target": "chromium", "plannedCaseIds": ["CASE-106", "CASE-107", "CASE-108", "CASE-109"] }
+  ]
+}

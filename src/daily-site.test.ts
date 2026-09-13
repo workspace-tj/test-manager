@@ -36,6 +36,7 @@ describe('daily site', () => {
     expect(html).toContain('新規失敗 1');
     expect(html).toContain('復旧 1');
     expect(html).toContain('CASE-001');
+    expect(html).toContain('<div class="row-detail"><span class="label danger">新規失敗</span></div>');
     expect(html).toContain('orders');
     expect(html).toContain('2 / 2');
     expect(html).toContain('role="columnheader">結果取得率');
