@@ -312,6 +312,7 @@ type TestRunUnit = Readonly<
       layer: string;
       target: string;
       reason: 'cancelled' | 'timedOut' | 'runnerError' | 'artifactMissing';
+      plannedCaseIds: ReadonlyArray<string>;
       observedCaseIds: ReadonlyArray<string>;
     }
 >;

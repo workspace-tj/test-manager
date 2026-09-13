@@ -49,7 +49,13 @@ const incompleteUnitSchema = (idPattern: RegExp) => z.strictObject({
   layer: z.string().min(1),
   target: z.string().min(1),
   reason: z.enum(['cancelled', 'timedOut', 'runnerError', 'artifactMissing']),
+  plannedCaseIds: z.array(caseIdSchema(idPattern)).refine((ids) => new Set(ids).size === ids.length, 'plannedCaseIds must be unique'),
   observedCaseIds: z.array(caseIdSchema(idPattern)).refine((ids) => new Set(ids).size === ids.length, 'observedCaseIds must be unique'),
+}).superRefine((unit, context) => {
+  const plannedIds = new Set(unit.plannedCaseIds);
+  for (const [index, id] of unit.observedCaseIds.entries()) if (!plannedIds.has(id)) {
+    context.addIssue({ code: 'custom', path: ['observedCaseIds', index], message: `observed case ${id} is not in plannedCaseIds` });
+  }
 });
 
 export const testRunSchema = (idPattern: RegExp) => z.strictObject({
@@ -66,6 +72,8 @@ export const testRunSchema = (idPattern: RegExp) => z.strictObject({
 }).superRefine((run, context) => {
   const unitIds = run.units.map((unit) => unit.unitId);
   if (new Set(unitIds).size !== unitIds.length) context.addIssue({ code: 'custom', path: ['units'], message: 'unitId must be unique within a run' });
+  const plannedCaseIds = run.units.flatMap((unit) => unit.plannedCaseIds);
+  if (new Set(plannedCaseIds).size !== plannedCaseIds.length) context.addIssue({ code: 'custom', path: ['units'], message: 'planned case IDs must be unique within a run' });
 });
 
 export const parseTestRun = (input: unknown, idPattern: RegExp) => testRunSchema(idPattern).safeParse(input);

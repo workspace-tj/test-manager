@@ -64,4 +64,31 @@ describe('normalized test run', () => {
     }, /^(?:CASE-[0-9]{3})$/u);
     expect(result.success).toBe(false);
   });
+
+  it('requires incomplete units to retain their planned cases', () => {
+    const result = parseTestRun({
+      ...input,
+      units: [{
+        state: 'incomplete',
+        unitId: 'playwright-e2e-chromium',
+        runner: 'playwright',
+        layer: 'E2E',
+        target: 'chromium',
+        reason: 'runnerError',
+        plannedCaseIds: ['CASE-001', 'CASE-002'],
+        observedCaseIds: ['CASE-001'],
+      }],
+    }, /^(?:CASE-[0-9]{3})$/u);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a case planned by more than one unit in the same run', () => {
+    const result = parseTestRun({
+      ...input,
+      units: [completedUnit, { ...completedUnit, unitId: 'duplicate-unit' }],
+    }, /^(?:CASE-[0-9]{3})$/u);
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues.some((issue) => issue.message === 'planned case IDs must be unique within a run')).toBe(true);
+  });
 });
