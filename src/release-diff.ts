@@ -2,6 +2,7 @@ import { observedCaseStatus } from './case-result.js';
 import type { ObservedCaseStatus } from './case-result.js';
 import type { ReleaseCatalogCase, ReleaseCatalogSnapshot } from './release-catalog.js';
 import type { TestRun } from './test-run.js';
+import { validateTestRunCatalog } from './test-run-catalog.js';
 
 type LatestResult = Readonly<
   | { kind: 'notProvided' | 'notInRun' | 'missing' | 'notApplicable' }
@@ -86,13 +87,10 @@ export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => 
   if (input.staging.latestRun && (input.staging.latestRun.environment !== 'staging' || input.staging.latestRun.commit !== input.staging.snapshot.commit)) {
     problems.push('staging run must use the staging environment and commit');
   }
-  const stagingCases = new Map(input.staging.snapshot.cases.map((item) => [item.id, item]));
-  for (const unit of input.staging.latestRun?.units ?? []) for (const caseId of unit.plannedCaseIds) {
-    const managedCase = stagingCases.get(caseId);
-    if (!managedCase) problems.push(`staging run contains unknown case ${caseId}`);
-    else if (managedCase.source === 'manual' || managedCase.source === 'storybook' || managedCase.source !== unit.runner) {
-      problems.push(`staging run runner ${unit.runner} does not match case ${caseId} source ${managedCase.source}`);
-    }
+  if (input.staging.latestRun) for (const problem of validateTestRunCatalog(input.staging.snapshot.cases, input.staging.latestRun)) {
+    problems.push(problem.kind === 'unknownCase'
+      ? `staging run contains unknown case ${problem.caseId}`
+      : `staging run runner ${problem.runner} does not match case ${problem.caseId} source ${problem.source}`);
   }
   if (problems.length > 0) return { ok: false, problems };
 

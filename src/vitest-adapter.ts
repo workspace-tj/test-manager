@@ -62,21 +62,32 @@ const metadataSchema = z.looseObject({ caseId: z.string().min(1) });
 const hasSyntaxError = (errors: ReadonlyArray<Readonly<Record<string, unknown>>> | undefined): boolean =>
   errors?.some((error) => error.__vitest_test_syntax_error__ === true || error.name === 'TestSyntaxError') ?? false;
 
-const artifactRefs = (testCase: VitestCaseSource): ReadonlyArray<string> => testCase.artifacts()
-  .flatMap((artifact) => artifact.attachments ?? [])
-  .flatMap((attachment) => attachment.path === undefined ? [] : [attachment.path]);
+const isWithin = (root: string, candidate: string): boolean => {
+  const relative = path.relative(root, candidate);
+  return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
+};
 
-const pendingCase = (testCase: VitestCaseSource): unknown => ({
+const artifactRefs = (testCase: VitestCaseSource, artifactRoot: string): ReadonlyArray<string> => testCase.artifacts()
+  .flatMap((artifact) => artifact.attachments ?? [])
+  .flatMap((attachment) => {
+    if (attachment.path === undefined) return [];
+    const absoluteRoot = path.resolve(artifactRoot);
+    const absoluteAttachment = path.resolve(attachment.path);
+    if (!isWithin(absoluteRoot, absoluteAttachment)) throw new Error(`Vitest attachment is outside artifactRoot: ${attachment.path}`);
+    return [path.relative(absoluteRoot, absoluteAttachment).split(path.sep).join('/')];
+  });
+
+const pendingCase = (testCase: VitestCaseSource, artifactRoot: string): unknown => ({
   caseId: metadataSchema.safeParse(testCase.meta()).data?.caseId,
   state: 'pending',
   mode: testCase.options.mode,
   fails: testCase.options.fails ?? false,
-  artifactRefs: artifactRefs(testCase),
+  artifactRefs: artifactRefs(testCase, artifactRoot),
 });
 
-const observedCase = (testCase: VitestCaseSource): unknown => {
+const observedCase = (testCase: VitestCaseSource, artifactRoot: string): unknown => {
   const result = testCase.result();
-  if (result.state === 'pending') return pendingCase(testCase);
+  if (result.state === 'pending') return pendingCase(testCase, artifactRoot);
   const diagnostic = testCase.diagnostic();
   if (!diagnostic) throw new Error(`Vitest test ${testCase.id} finished without diagnostic data`);
   return {
@@ -89,7 +100,7 @@ const observedCase = (testCase: VitestCaseSource): unknown => {
     retryCount: diagnostic.retryCount,
     flaky: diagnostic.flaky,
     syntaxError: result.state === 'failed' && hasSyntaxError(result.errors),
-    artifactRefs: artifactRefs(testCase),
+    artifactRefs: artifactRefs(testCase, artifactRoot),
   };
 };
 
@@ -134,6 +145,7 @@ export const toVitestUnit = (input: unknown, idPattern: RegExp) => {
 
 export type TestManagerVitestReporterOptions = Readonly<{
   outputFile: string;
+  artifactRoot: string;
   unitId: string;
   layer: string;
   target: string;
@@ -153,15 +165,15 @@ export class TestManagerVitestReporter implements Reporter {
   }
 
   onTestModuleCollected(testModule: TestModule): void {
-    for (const testCase of testModule.children.allTests()) this.#tests.set(testCase.id, pendingCase(testCase));
+    for (const testCase of testModule.children.allTests()) this.#tests.set(testCase.id, pendingCase(testCase, this.#options.artifactRoot));
   }
 
   onTestCaseReady(testCase: TestCase | VitestCaseSource): void {
-    this.#tests.set(testCase.id, pendingCase(testCase));
+    this.#tests.set(testCase.id, pendingCase(testCase, this.#options.artifactRoot));
   }
 
   onTestCaseResult(testCase: TestCase | VitestCaseSource): void {
-    this.#tests.set(testCase.id, observedCase(testCase));
+    this.#tests.set(testCase.id, observedCase(testCase, this.#options.artifactRoot));
   }
 
   async onTestRunEnd(

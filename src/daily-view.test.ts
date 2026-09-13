@@ -76,6 +76,16 @@ describe('daily view', () => {
     expect(result).toEqual({ ok: false, problems: [{ kind: 'unknownCase', caseId: 'CASE-999' }] });
   });
 
+  it('rejects a run unit whose runner does not match the catalog source', async () => {
+    const catalog = await checkProject(path.resolve('fixtures/valid/test-manager.yaml'));
+    if (!catalog.ok) throw new Error('fixture must be valid');
+    const result = buildDailyView(catalog.catalog, run('current', [], ['CASE-001']));
+    expect(result).toEqual({
+      ok: false,
+      problems: [{ kind: 'runnerMismatch', caseId: 'CASE-001', runner: 'playwright', source: 'vitest' }],
+    });
+  });
+
   it('does not call a failure new when there is no comparable previous observation', async () => {
     const catalog = await checkProject(path.resolve('fixtures/valid/test-manager.yaml'));
     if (!catalog.ok) throw new Error('fixture must be valid');

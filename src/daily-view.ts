@@ -4,6 +4,8 @@ import type { CaseId, DocumentId } from './ids.js';
 import type { TestRun } from './test-run.js';
 import { observedCaseStatus } from './case-result.js';
 import type { ObservedCaseStatus } from './case-result.js';
+import { validateTestRunCatalog } from './test-run-catalog.js';
+import type { TestRunCatalogProblem } from './test-run-catalog.js';
 
 type CaseStatus = ObservedCaseStatus | 'missing';
 
@@ -38,7 +40,7 @@ export type DailyView = Readonly<{
 
 export type DailyViewResult = Readonly<
   | { ok: true; view: DailyView }
-  | { ok: false; problems: ReadonlyArray<Readonly<{ kind: 'unknownCase'; caseId: string }>> }
+  | { ok: false; problems: ReadonlyArray<TestRunCatalogProblem> }
 >;
 
 const observedStatuses = (run: TestRun): ReadonlyMap<CaseId, ObservedCaseStatus> => new Map(
@@ -72,8 +74,8 @@ const rootDocument = (document: KnowledgeDocument, byId: ReadonlyMap<DocumentId,
 export const buildDailyView = (catalog: Catalog, current: TestRun, previous?: TestRun): DailyViewResult => {
   const casesById = new Map(catalog.cases.map((managedCase) => [managedCase.id, managedCase]));
   const currentPlanned = plannedCaseIds(current);
-  const unknownCases = currentPlanned.filter((caseId) => !casesById.has(caseId));
-  if (unknownCases.length > 0) return { ok: false, problems: unknownCases.map((caseId) => ({ kind: 'unknownCase', caseId })) };
+  const problems = validateTestRunCatalog(catalog.cases, current);
+  if (problems.length > 0) return { ok: false, problems };
 
   const documentsById = new Map(catalog.documents.map((document) => [document.id, document]));
   const belongsToRule = catalog.rules.case.fields.belongsTo;

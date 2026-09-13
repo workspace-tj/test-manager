@@ -87,7 +87,7 @@ describe('Vitest result adapter', () => {
   it('collects Vitest reporter events and writes a normalized unit artifact', async () => {
     const outputFile = path.resolve('/tmp', `test-manager-vitest-${process.pid}.json`);
     const reporter = new TestManagerVitestReporter({
-      outputFile, unitId: 'vitest-unit-node', layer: 'unit', target: 'node', idPattern: /^(?:CASE-[0-9]{3})$/u,
+      outputFile, artifactRoot: '/tmp', unitId: 'vitest-unit-node', layer: 'unit', target: 'node', idPattern: /^(?:CASE-[0-9]{3})$/u,
     });
     const pending = {
       id: 'test-1', options: { mode: 'run' as const, fails: false },
@@ -109,5 +109,35 @@ describe('Vitest result adapter', () => {
     });
     expect(artifact).not.toHaveProperty('runner');
     expect(artifact).not.toHaveProperty('plannedCaseIds');
+  });
+
+  it('stores only relative attachment references inside artifactRoot', async () => {
+    const outputFile = path.resolve('/tmp', `test-manager-vitest-attachment-${process.pid}.json`);
+    const reporter = new TestManagerVitestReporter({
+      outputFile, artifactRoot: '/tmp/test-manager-artifacts',
+      unitId: 'vitest-unit-node', layer: 'unit', target: 'node', idPattern: /^(?:CASE-[0-9]{3})$/u,
+    });
+    const testCase = {
+      id: 'test-1', options: { mode: 'run' as const, fails: false },
+      meta: () => ({ caseId: 'CASE-001' }), result: () => ({ state: 'pending' as const }),
+      diagnostic: () => undefined,
+      artifacts: () => [{ attachments: [{ path: '/tmp/test-manager-artifacts/screenshots/failure.png' }] }],
+    };
+
+    reporter.onTestCaseResult({
+      ...testCase,
+      result: () => ({ state: 'passed' as const, errors: undefined }),
+      diagnostic: () => ({ duration: 12, startTime: 1_789_257_601_000, retryCount: 0, flaky: false }),
+    });
+    expect(() => reporter.onTestCaseReady({
+      ...testCase,
+      id: 'test-2',
+      artifacts: () => [{ attachments: [{ path: '/tmp/private-machine/failure.png' }] }],
+    })).toThrow('outside artifactRoot');
+    await reporter.onTestRunEnd([], [], 'passed');
+    const artifact: unknown = JSON.parse(await readFile(outputFile, 'utf8'));
+    expect(artifact).toMatchObject({
+      observations: [{ attempts: [{ artifactRefs: ['screenshots/failure.png'] }] }],
+    });
   });
 });
