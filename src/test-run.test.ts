@@ -12,7 +12,13 @@ const completedUnit = {
   observations: [{
     caseId: 'CASE-001',
     expected: 'passed',
+    attemptCoverage: { kind: 'complete' },
     attempts: [{ outcome: 'passed', durationMs: 18, startedAt: '2026-09-13T00:00:01Z', artifactRefs: [] }],
+  }, {
+    caseId: 'CASE-002',
+    expected: 'passed',
+    attemptCoverage: { kind: 'complete' },
+    attempts: [{ outcome: 'passed', durationMs: 12, startedAt: '2026-09-13T00:00:02Z', artifactRefs: [] }],
   }],
 } as const;
 
@@ -44,6 +50,20 @@ describe('normalized test run', () => {
     expectTypeOf<CaseObservation['attempts']>().toMatchTypeOf<readonly [unknown, ...unknown[]]>();
   });
 
+  it('retains summary-only retry evidence without pretending to know every attempt', () => {
+    const result = parseTestRun({
+      ...input,
+      units: [{
+        ...completedUnit,
+        observations: [{
+          ...completedUnit.observations[0],
+          attemptCoverage: { kind: 'finalOnly', retryCount: 2, flaky: true },
+        }, completedUnit.observations[1]],
+      }],
+    }, /^(?:CASE-[0-9]{3})$/u);
+    expect(result.success).toBe(true);
+  });
+
   it('rejects duplicate plans and observations outside the discovered plan', () => {
     const result = parseTestRun({
       ...input,
@@ -55,6 +75,16 @@ describe('normalized test run', () => {
       'plannedCaseIds must be unique',
       'observation CASE-999 is not in plannedCaseIds',
     ]));
+  });
+
+  it('rejects a completed unit when any planned case lacks an observation', () => {
+    const result = parseTestRun({
+      ...input,
+      units: [{ ...completedUnit, observations: [completedUnit.observations[0]] }],
+    }, /^(?:CASE-[0-9]{3})$/u);
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues.some((item) => item.message === 'completed units must observe every planned case')).toBe(true);
   });
 
   it('rejects nullable attempts and mixed unit states', () => {
@@ -76,7 +106,7 @@ describe('normalized test run', () => {
         target: 'chromium',
         reason: 'runnerError',
         plannedCaseIds: ['CASE-001', 'CASE-002'],
-        observedCaseIds: ['CASE-001'],
+        observations: [completedUnit.observations[0]],
       }],
     }, /^(?:CASE-[0-9]{3})$/u);
     expect(result.success).toBe(true);

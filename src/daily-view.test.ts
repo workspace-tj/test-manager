@@ -27,11 +27,11 @@ const run = (
       {
         state: 'completed', unitId: 'vitest-unit', runner: 'vitest', layer: 'unit', target: 'node',
         plannedCaseIds: observations.map((item) => item.caseId),
-        observations: observations.map((item) => ({ caseId: item.caseId, expected: 'passed', attempts: [attempt(item.outcome)] })),
+        observations: observations.map((item) => ({ caseId: item.caseId, expected: 'passed', attemptCoverage: { kind: 'complete' }, attempts: [attempt(item.outcome)] })),
       },
       ...(incomplete.length === 0 ? [] : [{
         state: 'incomplete' as const, unitId: 'playwright-e2e', runner: 'playwright' as const, layer: 'E2E', target: 'chromium', reason: 'runnerError' as const,
-        plannedCaseIds: incomplete, observedCaseIds: [],
+        plannedCaseIds: incomplete, observations: [],
       }]),
     ],
   }, /^(?:CASE-[0-9]{3})$/u);

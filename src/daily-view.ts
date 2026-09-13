@@ -55,9 +55,7 @@ const observationStatus = (observation: CaseObservation): ObservedStatus => {
 };
 
 const observedStatuses = (run: TestRun): ReadonlyMap<CaseId, ObservedStatus> => new Map(
-  run.units.flatMap((unit) => unit.state === 'completed'
-    ? unit.observations.map((observation) => [observation.caseId, observationStatus(observation)] as const)
-    : []),
+  run.units.flatMap((unit) => unit.observations.map((observation) => [observation.caseId, observationStatus(observation)] as const)),
 );
 
 const plannedCaseIds = (run: TestRun): ReadonlyArray<CaseId> => run.units.flatMap((unit) => unit.plannedCaseIds);

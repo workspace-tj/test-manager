@@ -313,13 +313,16 @@ type TestRunUnit = Readonly<
       target: string;
       reason: 'cancelled' | 'timedOut' | 'runnerError' | 'artifactMissing';
       plannedCaseIds: ReadonlyArray<string>;
-      observedCaseIds: ReadonlyArray<string>;
+      observations: ReadonlyArray<CaseObservation>;
     }
 >;
 
 type CaseObservation = Readonly<{
   caseId: string;
   expected: 'passed' | 'failed' | 'skipped';
+  attemptCoverage:
+    | Readonly<{ kind: 'complete' }>
+    | Readonly<{ kind: 'finalOnly'; retryCount: number; flaky: boolean }>;
   attempts: readonly [CaseAttempt, ...CaseAttempt[]];
 }>;
 

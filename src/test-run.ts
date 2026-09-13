@@ -17,6 +17,10 @@ const AttemptSchema = z.strictObject({
 const observationSchema = (idPattern: RegExp) => z.strictObject({
   caseId: caseIdSchema(idPattern),
   expected: z.enum(['passed', 'failed', 'skipped']),
+  attemptCoverage: z.discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('complete') }),
+    z.strictObject({ kind: z.literal('finalOnly'), retryCount: z.number().int().nonnegative(), flaky: z.boolean() }),
+  ]),
   attempts: z.tuple([AttemptSchema]).rest(AttemptSchema),
 });
 
@@ -40,6 +44,9 @@ const completedUnitSchema = (idPattern: RegExp) => z.strictObject({
   for (const [index, observation] of unit.observations.entries()) if (!plannedIds.has(observation.caseId)) {
     context.addIssue({ code: 'custom', path: ['observations', index, 'caseId'], message: `observation ${observation.caseId} is not in plannedCaseIds` });
   }
+  if (observedIds.length !== unit.plannedCaseIds.length) {
+    context.addIssue({ code: 'custom', path: ['observations'], message: 'completed units must observe every planned case' });
+  }
 });
 
 const incompleteUnitSchema = (idPattern: RegExp) => z.strictObject({
@@ -50,13 +57,22 @@ const incompleteUnitSchema = (idPattern: RegExp) => z.strictObject({
   target: z.string().min(1),
   reason: z.enum(['cancelled', 'timedOut', 'runnerError', 'artifactMissing']),
   plannedCaseIds: z.array(caseIdSchema(idPattern)).refine((ids) => new Set(ids).size === ids.length, 'plannedCaseIds must be unique'),
-  observedCaseIds: z.array(caseIdSchema(idPattern)).refine((ids) => new Set(ids).size === ids.length, 'observedCaseIds must be unique'),
+  observations: z.array(observationSchema(idPattern)),
 }).superRefine((unit, context) => {
+  const observedIds = unit.observations.map((observation) => observation.caseId);
+  if (new Set(observedIds).size !== observedIds.length) {
+    context.addIssue({ code: 'custom', path: ['observations'], message: 'observations must contain unique case IDs' });
+  }
   const plannedIds = new Set(unit.plannedCaseIds);
-  for (const [index, id] of unit.observedCaseIds.entries()) if (!plannedIds.has(id)) {
-    context.addIssue({ code: 'custom', path: ['observedCaseIds', index], message: `observed case ${id} is not in plannedCaseIds` });
+  for (const [index, observation] of unit.observations.entries()) if (!plannedIds.has(observation.caseId)) {
+    context.addIssue({ code: 'custom', path: ['observations', index, 'caseId'], message: `observation ${observation.caseId} is not in plannedCaseIds` });
   }
 });
+
+export const testRunUnitSchema = (idPattern: RegExp) => z.discriminatedUnion('state', [
+  completedUnitSchema(idPattern),
+  incompleteUnitSchema(idPattern),
+]);
 
 export const testRunSchema = (idPattern: RegExp) => z.strictObject({
   schemaVersion: z.literal(1),
@@ -68,7 +84,7 @@ export const testRunSchema = (idPattern: RegExp) => z.strictObject({
   startedAt: TimestampSchema,
   completedAt: TimestampSchema,
   ciUrl: z.url(),
-  units: z.array(z.discriminatedUnion('state', [completedUnitSchema(idPattern), incompleteUnitSchema(idPattern)])).min(1),
+  units: z.array(testRunUnitSchema(idPattern)).min(1),
 }).superRefine((run, context) => {
   const unitIds = run.units.map((unit) => unit.unitId);
   if (new Set(unitIds).size !== unitIds.length) context.addIssue({ code: 'custom', path: ['units'], message: 'unitId must be unique within a run' });
