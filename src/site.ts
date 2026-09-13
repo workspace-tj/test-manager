@@ -1,7 +1,6 @@
-import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import type { Catalog, KnowledgeDocument, ManagedCase } from './model.js';
 import { sortDocumentsForDisplay } from './documents.js';
+import { writeManagedFiles } from './managed-output.js';
 
 const escapeHtml = (value: unknown): string => String(value)
   .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -72,38 +71,6 @@ export const renderSite = (catalog: Catalog): ReadonlyMap<string, string> => {
   return files;
 };
 
-const exists = async (file: string): Promise<boolean> => stat(file).then(() => true, () => false);
-
 export const writeSite = async (catalog: Catalog, outPath: string): Promise<void> => {
-  const out = path.resolve(outPath);
-  if (out === catalog.projectRoot || catalog.projectRoot.startsWith(`${out}${path.sep}`)) throw new Error('output directory must not be the project root or its ancestor');
-  if (await exists(out)) {
-    const marker = path.join(out, '.test-manager-output');
-    if (!await exists(marker) || await readFile(marker, 'utf8') !== 'v1\n') throw new Error('refusing to replace a directory not created by test-manager');
-  }
-  await mkdir(path.dirname(out), { recursive: true });
-  const temporary = await mkdtemp(path.join(path.dirname(out), `.${path.basename(out)}.test-manager-`));
-  const backup = `${temporary}-previous`;
-  let moved = false;
-  let backedUp = false;
-  try {
-    for (const [relative, content] of renderSite(catalog)) {
-      const target = path.join(temporary, relative);
-      await mkdir(path.dirname(target), { recursive: true });
-      await writeFile(target, content, 'utf8');
-    }
-    if (await exists(out)) {
-      await rename(out, backup);
-      backedUp = true;
-    }
-    await rename(temporary, out);
-    moved = true;
-    if (backedUp) await rm(backup, { recursive: true });
-  } catch (error) {
-    if (backedUp && !await exists(out) && await exists(backup)) await rename(backup, out);
-    throw error;
-  } finally {
-    if (!moved && await exists(temporary)) await rm(temporary, { recursive: true });
-    if (moved && await exists(backup)) await rm(backup, { recursive: true });
-  }
+  await writeManagedFiles(renderSite(catalog), outPath, catalog.projectRoot, 'v1\n');
 };
