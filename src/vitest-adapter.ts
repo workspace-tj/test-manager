@@ -33,7 +33,7 @@ const vitestUnitInputSchema = z.strictObject({
   target: z.string().min(1),
   completion: z.discriminatedUnion('state', [
     z.strictObject({ state: z.literal('completed') }),
-    z.strictObject({ state: z.literal('incomplete'), reason: z.enum(['cancelled', 'timedOut', 'runnerError', 'artifactMissing']) }),
+    z.strictObject({ state: z.literal('incomplete'), reason: z.enum(['cancelled', 'timedOut', 'runnerError']) }),
   ]),
   tests: z.array(vitestCaseSchema).min(1),
 }).superRefine((unit, context) => {
@@ -185,7 +185,11 @@ export class TestManagerVitestReporter implements Reporter {
     }, this.#options.idPattern);
     if (!parsed.success) throw new Error(`Cannot create Vitest unit artifact: ${parsed.error.message}`);
     await mkdir(path.dirname(this.#options.outputFile), { recursive: true });
-    await writeFile(this.#options.outputFile, `${JSON.stringify(parsed.data, null, 2)}\n`, 'utf8');
+    const { state, unitId, observations } = parsed.data;
+    const artifact = state === 'completed'
+      ? { state, unitId, observations }
+      : { state, unitId, reason: parsed.data.reason, observations };
+    await writeFile(this.#options.outputFile, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
   }
 }
 

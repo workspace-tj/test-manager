@@ -104,8 +104,10 @@ describe('Vitest result adapter', () => {
 
     const artifact: unknown = JSON.parse(await readFile(outputFile, 'utf8'));
     expect(artifact).toMatchObject({
-      state: 'completed', runner: 'vitest', plannedCaseIds: ['CASE-001'],
+      state: 'completed', unitId: 'vitest-unit-node',
       observations: [{ caseId: 'CASE-001', attemptCoverage: { kind: 'finalOnly', retryCount: 1, flaky: true } }],
     });
+    expect(artifact).not.toHaveProperty('runner');
+    expect(artifact).not.toHaveProperty('plannedCaseIds');
   });
 });

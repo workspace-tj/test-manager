@@ -2,10 +2,11 @@ import { z } from 'zod';
 import { caseIdSchema } from './ids.js';
 
 const RunIdSchema = z.string().min(1).brand<'RunId'>();
-const ScopeIdSchema = z.string().min(1).brand<'ScopeId'>();
-const EnvironmentSchema = z.string().min(1).brand<'TestEnvironment'>();
+const IdentifierSchema = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,127})$/u);
+export const ScopeIdSchema = IdentifierSchema.brand<'ScopeId'>();
+export const EnvironmentSchema = IdentifierSchema.brand<'TestEnvironment'>();
 const CommitSchema = z.string().regex(/^[0-9a-f]{7,64}$/u).brand<'CommitSha'>();
-const TimestampSchema = z.iso.datetime({ offset: true });
+export const TimestampSchema = z.iso.datetime({ offset: true });
 
 const AttemptSchema = z.strictObject({
   outcome: z.enum(['passed', 'failed', 'timedOut', 'skipped', 'interrupted']),
@@ -14,7 +15,7 @@ const AttemptSchema = z.strictObject({
   artifactRefs: z.array(z.string().min(1)),
 });
 
-const observationSchema = (idPattern: RegExp) => z.strictObject({
+export const caseObservationSchema = (idPattern: RegExp) => z.strictObject({
   caseId: caseIdSchema(idPattern),
   expected: z.enum(['passed', 'failed', 'skipped']),
   attemptCoverage: z.discriminatedUnion('kind', [
@@ -31,7 +32,7 @@ const completedUnitSchema = (idPattern: RegExp) => z.strictObject({
   layer: z.string().min(1),
   target: z.string().min(1),
   plannedCaseIds: z.array(caseIdSchema(idPattern)),
-  observations: z.array(observationSchema(idPattern)),
+  observations: z.array(caseObservationSchema(idPattern)),
 }).superRefine((unit, context) => {
   if (new Set(unit.plannedCaseIds).size !== unit.plannedCaseIds.length) {
     context.addIssue({ code: 'custom', path: ['plannedCaseIds'], message: 'plannedCaseIds must be unique' });
@@ -57,7 +58,7 @@ const incompleteUnitSchema = (idPattern: RegExp) => z.strictObject({
   target: z.string().min(1),
   reason: z.enum(['cancelled', 'timedOut', 'runnerError', 'artifactMissing']),
   plannedCaseIds: z.array(caseIdSchema(idPattern)).refine((ids) => new Set(ids).size === ids.length, 'plannedCaseIds must be unique'),
-  observations: z.array(observationSchema(idPattern)),
+  observations: z.array(caseObservationSchema(idPattern)),
 }).superRefine((unit, context) => {
   const observedIds = unit.observations.map((observation) => observation.caseId);
   if (new Set(observedIds).size !== observedIds.length) {
