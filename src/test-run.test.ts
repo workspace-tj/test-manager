@@ -95,6 +95,11 @@ describe('normalized test run', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects non-HTTP CI links', () => {
+    const result = parseTestRun({ ...input, ciUrl: 'javascript:alert(1)' }, /^(?:CASE-[0-9]{3})$/u);
+    expect(result.success).toBe(false);
+  });
+
   it('requires incomplete units to retain their planned cases', () => {
     const result = parseTestRun({
       ...input,

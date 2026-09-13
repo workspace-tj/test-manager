@@ -83,7 +83,7 @@ export const testRunSchema = (idPattern: RegExp) => z.strictObject({
   scopeId: ScopeIdSchema,
   startedAt: TimestampSchema,
   completedAt: TimestampSchema,
-  ciUrl: z.url(),
+  ciUrl: z.url({ protocol: /^https?$/u }),
   units: z.array(testRunUnitSchema(idPattern)).min(1),
 }).superRefine((run, context) => {
   const unitIds = run.units.map((unit) => unit.unitId);
