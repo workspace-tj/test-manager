@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { Catalog, KnowledgeDocument, ManagedCase } from './model.js';
+import { sortDocumentsForDisplay } from './documents.js';
 
 const escapeHtml = (value: unknown): string => String(value)
   .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -37,7 +38,7 @@ const breadcrumbs = (document: KnowledgeDocument, byId: ReadonlyMap<string, Know
 
 export const renderSite = (catalog: Catalog): ReadonlyMap<string, string> => {
   const files = new Map<string, string>();
-  const documents = [...catalog.documents].sort((a, b) => compareText(a.id, b.id));
+  const documents = sortDocumentsForDisplay(catalog.documents, catalog.rules);
   const cases = [...catalog.cases].sort((a, b) => compareText(a.id, b.id));
   const byId = new Map(documents.map((document) => [document.id, document]));
   const values = (select: (item: ManagedCase) => unknown): string[] => [...new Set(cases.map(select).filter((value): value is string | number => typeof value === 'string' || typeof value === 'number').map(String))].sort(compareText);

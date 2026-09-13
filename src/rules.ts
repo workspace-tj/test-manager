@@ -19,6 +19,11 @@ const RequirednessShape = {
 const ValuesSchema = z.record(z.string(), z.object({ description: z.string().min(1) }).strict())
   .refine((values) => Object.keys(values).length > 0, 'values must not be empty');
 
+const DisplayOrderSchema = z.record(
+  z.string(),
+  z.array(z.string().min(1)).refine((ids) => new Set(ids).size === ids.length, 'must contain unique document IDs'),
+);
+
 const FieldRuleSchema = z.discriminatedUnion('type', [
   z.object({ ...RequirednessShape, type: z.literal('reference'), targetKinds: z.array(z.string().min(1)).min(1) }).strict(),
   z.object({ ...RequirednessShape, type: z.literal('reference-list'), targetKinds: z.array(z.string().min(1)).min(1), minItems: z.number().int().nonnegative().optional(), uniqueItems: z.boolean().optional() }).strict(),
@@ -43,7 +48,10 @@ const RulesShape = z.object({
       paths: z.array(z.string().min(1)).min(1),
     }).strict()),
   }).strict(),
-  documents: z.object({ kinds: z.record(z.string(), KindRuleSchema) }).strict(),
+  documents: z.object({
+    kinds: z.record(z.string(), KindRuleSchema),
+    displayOrder: DisplayOrderSchema.optional().default({}),
+  }).strict(),
   case: z.object({ fields: z.record(z.string(), FieldRuleSchema) }).strict(),
 }).strict();
 
@@ -85,6 +93,9 @@ const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z
     for (const targetKind of rule.parent.targetKinds) if (rules.documents.kinds[targetKind] === undefined) {
       context.addIssue({ code: 'custom', path: ['documents', 'kinds', kind, 'parent', 'targetKinds'], message: `unknown document kind ${targetKind}` });
     }
+  }
+  for (const kind of Object.keys(rules.documents.displayOrder)) if (rules.documents.kinds[kind] === undefined) {
+    context.addIssue({ code: 'custom', path: ['documents', 'displayOrder', kind], message: `unknown document kind ${kind}` });
   }
 };
 

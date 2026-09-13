@@ -21,6 +21,9 @@ documents:
     decision:
       description: 判断と制約
       parent: { required: true, targetKinds: [feature] }
+  displayOrder:
+    domain: [orders, catalog]
+    feature: [order-cancellation]
 case:
   fields:
     belongsTo: { required: true, placement: classification, type: reference, targetKinds: [domain, feature] }

@@ -51,7 +51,10 @@ export type ProjectRules = Readonly<{
     manualCases: ReadonlyArray<string>;
     sources: ReadonlyArray<Readonly<{ kind: SourceKind; paths: ReadonlyArray<string> }>>;
   }>;
-  documents: Readonly<{ kinds: Readonly<Record<string, KindRule>> }>;
+  documents: Readonly<{
+    kinds: Readonly<Record<string, KindRule>>;
+    displayOrder: Readonly<Record<string, ReadonlyArray<string>>>;
+  }>;
   case: Readonly<{ fields: Readonly<Record<string, FieldRule>> }>;
 }>;
 

@@ -3,7 +3,7 @@ import fg from 'fast-glob';
 import type { Catalog, CheckResult, Diagnostic, ManagedCase } from './model.js';
 import { diagnostic } from './diagnostics.js';
 import { loadRules } from './rules.js';
-import { readKnowledgeDocument, validateDocumentGraph } from './documents.js';
+import { readKnowledgeDocument, validateDocumentDisplayOrder, validateDocumentGraph } from './documents.js';
 import { readManualCase } from './manual.js';
 import { readTestSource } from './source.js';
 
@@ -51,7 +51,11 @@ export const checkProject = async (configPath: string): Promise<CheckResult> => 
 
   const documentResults = await Promise.all(documentFiles.map((file) => readKnowledgeDocument(file, projectRoot, rules)));
   const documents = documentResults.flatMap((result) => result.document ? [result.document] : []);
-  diagnostics.push(...documentResults.flatMap((result) => result.diagnostics), ...validateDocumentGraph(documents, rules));
+  diagnostics.push(
+    ...documentResults.flatMap((result) => result.diagnostics),
+    ...validateDocumentGraph(documents, rules),
+    ...validateDocumentDisplayOrder(documents, rules, configFile),
+  );
 
   const manualResults = await Promise.all(manualFiles.map((file) => readManualCase(file, projectRoot, rules, documents)));
   const sourceResults = await Promise.all(sourceMatches.flatMap(({ source, files }) => files.map((file) => readTestSource(file, projectRoot, source.kind, rules, documents))));

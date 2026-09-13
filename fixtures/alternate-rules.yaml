@@ -9,6 +9,8 @@ documents:
     module:
       description: module
       parent: { required: false, targetKinds: [module] }
+  displayOrder:
+    module: [MOD-2, MOD-1]
 case:
   fields:
     belongsTo: { required: true, placement: classification, type: reference, targetKinds: [module] }

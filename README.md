@@ -71,6 +71,9 @@ documents:
     decision:
       description: 判断や制約
       parent: { required: true, targetKinds: [feature] }
+  displayOrder:
+    domain: [orders, billing, scheduling]
+    feature: [order-cancellation]
 
 case:
   fields:
@@ -112,6 +115,8 @@ case:
 ### documents.kinds
 
 知識文書の種類と、許可する親子関係を定義します。`parent.required` で親の必須性を、`targetKinds` で親として許可する種類を指定します。
+
+`documents.displayOrder` には、kindごとの安定した表示順を指定できます。実行結果によって順序は変わらず、一覧上の位置を保ちます。列挙していない文書は、指定済み文書の後ろへID順で表示します。存在しないID、kindが異なるID、重複したIDは設定エラーです。
 
 ### case.fields
 

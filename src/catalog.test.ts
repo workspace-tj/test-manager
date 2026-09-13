@@ -21,6 +21,7 @@ describe('project catalog', () => {
       ['orders', 'domain', undefined],
     ]);
     expect(result.catalog.rules.case.fields.belongsTo).toMatchObject({ type: 'reference', targetKinds: ['domain', 'feature'] });
+    expect(result.catalog.rules.documents.displayOrder.domain).toEqual(['orders', 'catalog']);
     expect(result.catalog.documents.find((item) => item.id === 'orders')?.refs).toEqual(['catalog']);
     expect(result.catalog.cases.map((item) => [item.id, item.source, item.status])).toEqual([
       ['CASE-101', 'manual', 'active'],
@@ -41,12 +42,15 @@ describe('project catalog', () => {
       .replace('manualCases: []', 'manualCases: ["knowledge/**/*.manual.yaml"]');
     await import('node:fs/promises').then(({ mkdir }) => mkdir(path.join(root, 'knowledge'), { recursive: true }));
     await writeFile(path.join(root, 'test-manager.yaml'), config, 'utf8');
-    await writeFile(path.join(root, 'knowledge/module.md'), `---\nid: MOD-1\nkind: module\ntitle: Module\n---\n`, 'utf8');
+    await writeFile(path.join(root, 'knowledge/module.md'), `---\nid: MOD-1\nkind: module\ntitle: Module one\n---\n`, 'utf8');
+    await writeFile(path.join(root, 'knowledge/module-two.md'), `---\nid: MOD-2\nkind: module\ntitle: Module two\n---\n`, 'utf8');
     await writeFile(path.join(root, 'knowledge/case.manual.yaml'), `id: CASE-1\ntitle: alternate\nbelongsTo: MOD-1\nrole: contract\nimpact: 20\nsteps:\n  - action: act\n    expected: done\n`, 'utf8');
     const result = await checkProject(path.join(root, 'test-manager.yaml'));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(renderSite(result.catalog).get('index.html')).toContain('>20<');
+    const documentIndex = renderSite(result.catalog).get('documents/index.html') ?? '';
+    expect(documentIndex.indexOf('Module two')).toBeLessThan(documentIndex.indexOf('Module one'));
   });
 
   it('reports missing belongsTo and does not inherit it from a parent or path', async () => {
@@ -77,6 +81,19 @@ describe('project catalog', () => {
     expect(codes.has('TM115')).toBe(true);
     expect(result.diagnostics.some((item) => item.code === 'TM113' && item.location.file === 'knowledge/order-cancellation/eligibility.md' && item.location.line === 5)).toBe(true);
     expect(result.diagnostics.some((item) => item.code === 'TM115' && item.location.file === 'knowledge/catalog.md' && item.location.line === 6)).toBe(true);
+  });
+
+  it('rejects missing and wrong-kind documents in configured display order', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-document-order-'));
+    await cp(fixture, root, { recursive: true });
+    const configFile = path.join(root, 'test-manager.yaml');
+    const config = await readFile(configFile, 'utf8');
+    await writeFile(configFile, config.replace('domain: [orders, catalog]', 'domain: [missing, order-cancellation]'), 'utf8');
+    const result = await checkProject(configFile);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.diagnostics.some((item) => item.code === 'TM116' && item.subject === 'documents.displayOrder.domain')).toBe(true);
+    expect(result.diagnostics.some((item) => item.code === 'TM117' && item.subject === 'documents.displayOrder.domain')).toBe(true);
   });
 
   it('detects a duplicate case ID across runners', async () => {

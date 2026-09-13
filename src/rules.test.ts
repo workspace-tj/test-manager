@@ -11,6 +11,7 @@ describe('project-defined vocabulary', () => {
     const result = await loadRules(path.resolve('fixtures/alternate-rules.yaml'));
     expect(result.diagnostics).toEqual([]);
     expect(result.rules?.documents.kinds.module).toBeDefined();
+    expect(result.rules?.documents.displayOrder).toEqual({ module: ['MOD-2', 'MOD-1'] });
     const role = result.rules?.case.fields.role;
     const impact = result.rules?.case.fields.impact;
     expect(Object.keys(role?.type === 'enum' ? role.values : {})).toEqual(['contract']);
@@ -75,5 +76,14 @@ describe('project-defined vocabulary', () => {
     const result = await loadRules(path.join(root, 'test-manager.yaml'));
     expect(result.rules).toBeUndefined();
     expect(result.diagnostics.some((item) => item.subject === 'case.fields.owner')).toBe(true);
+  });
+
+  it('rejects duplicate document IDs in a display order', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-display-order-'));
+    const source = await readFile(path.resolve('fixtures/alternate-rules.yaml'), 'utf8');
+    await writeFile(path.join(root, 'test-manager.yaml'), source.replace('[MOD-2, MOD-1]', '[MOD-1, MOD-1]'), 'utf8');
+    const result = await loadRules(path.join(root, 'test-manager.yaml'));
+    expect(result.rules).toBeUndefined();
+    expect(result.diagnostics.some((item) => item.subject === 'documents.displayOrder.module')).toBe(true);
   });
 });
