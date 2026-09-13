@@ -39,3 +39,11 @@ it.fails('未対応通貨の請求確定', {
 it.skip('締め日変更中の請求確定', {
   meta: { caseId: 'CASE-105' },
 }, () => {});
+
+/* @case
+ * belongsTo: invoicing
+ * impact: 2
+ */
+it.todo('複数税率の端数を確認する', {
+  meta: { caseId: 'CASE-111' },
+}, () => {});

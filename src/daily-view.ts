@@ -1,10 +1,11 @@
 import { sortDocumentsForDisplay } from './documents.js';
 import type { Catalog, KnowledgeDocument, ManagedCase } from './model.js';
 import type { CaseId, DocumentId } from './ids.js';
-import type { CaseObservation, TestRun } from './test-run.js';
+import type { TestRun } from './test-run.js';
+import { observedCaseStatus } from './case-result.js';
+import type { ObservedCaseStatus } from './case-result.js';
 
-type ObservedStatus = 'passed' | 'failed' | 'expectedFailure' | 'unexpectedPass' | 'skipped';
-type CaseStatus = ObservedStatus | 'missing';
+type CaseStatus = ObservedCaseStatus | 'missing';
 
 export type DailyChange = Readonly<{
   caseId: CaseId;
@@ -40,22 +41,8 @@ export type DailyViewResult = Readonly<
   | { ok: false; problems: ReadonlyArray<Readonly<{ kind: 'unknownCase'; caseId: string }>> }
 >;
 
-const observationStatus = (observation: CaseObservation): ObservedStatus => {
-  const [first, ...rest] = observation.attempts;
-  const outcome = rest.at(-1)?.outcome ?? first.outcome;
-  if (observation.expected === 'failed') {
-    if (outcome === 'failed' || outcome === 'timedOut') return 'expectedFailure';
-    if (outcome === 'passed') return 'unexpectedPass';
-    return outcome === 'skipped' ? 'skipped' : 'failed';
-  }
-  if (observation.expected === 'skipped') return outcome === 'skipped' ? 'skipped' : 'failed';
-  if (outcome === 'passed') return 'passed';
-  if (outcome === 'skipped') return 'skipped';
-  return 'failed';
-};
-
-const observedStatuses = (run: TestRun): ReadonlyMap<CaseId, ObservedStatus> => new Map(
-  run.units.flatMap((unit) => unit.observations.map((observation) => [observation.caseId, observationStatus(observation)] as const)),
+const observedStatuses = (run: TestRun): ReadonlyMap<CaseId, ObservedCaseStatus> => new Map(
+  run.units.flatMap((unit) => unit.observations.map((observation) => [observation.caseId, observedCaseStatus(observation)] as const)),
 );
 
 const plannedCaseIds = (run: TestRun): ReadonlyArray<CaseId> => run.units.flatMap((unit) => unit.plannedCaseIds);

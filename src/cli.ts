@@ -6,6 +6,9 @@ import { renderDailySite } from './daily-site.js';
 import { buildDailyView } from './daily-view.js';
 import { formatDiagnostic } from './diagnostics.js';
 import { writeManagedFiles } from './managed-output.js';
+import { buildReleaseDiff } from './release-diff.js';
+import { renderReleaseSite } from './release-site.js';
+import { createReleaseCatalogSnapshot, parseReleaseCatalogSnapshot } from './release-catalog.js';
 import { writeSite } from './site.js';
 import { assembleTestRun } from './test-run-assembly.js';
 import { parseTestRun } from './test-run.js';
@@ -13,21 +16,25 @@ import { parseTestRun } from './test-run.js';
 const usage = `Usage:
   test-manager check --config <path>
   test-manager build --config <path> --out <path>
+  test-manager snapshot --config <path> --commit <sha> --out <path>
   test-manager daily --config <path> --stylesheet <path> --out <path> --current-run <path> [--previous-run <path>]
-  test-manager daily --config <path> --stylesheet <path> --out <path> --manifest <path> --completed-at <timestamp> [--unit-artifact <path> ...] [--previous-run <path>]`;
+  test-manager daily --config <path> --stylesheet <path> --out <path> --manifest <path> --completed-at <timestamp> [--unit-artifact <path> ...] [--previous-run <path>]
+  test-manager release --production-snapshot <path> --staging-snapshot <path> --stylesheet <path> --out <path> [--latest-staging-run <path>]`;
 
-type Command = 'check' | 'build' | 'daily';
+type Command = 'check' | 'build' | 'snapshot' | 'daily' | 'release';
 type ParsedArguments = Readonly<{ command: Command; flags: ReadonlyMap<string, ReadonlyArray<string>> }>;
 
 const allowedFlags: Readonly<Record<Command, ReadonlySet<string>>> = {
   check: new Set(['--config']),
   build: new Set(['--config', '--out']),
+  snapshot: new Set(['--config', '--commit', '--out']),
   daily: new Set(['--config', '--out', '--stylesheet', '--current-run', '--previous-run', '--manifest', '--completed-at', '--unit-artifact']),
+  release: new Set(['--production-snapshot', '--staging-snapshot', '--latest-staging-run', '--stylesheet', '--out']),
 };
 
 const parseArguments = (args: ReadonlyArray<string>): ParsedArguments | undefined => {
   const command = args[0];
-  if (command !== 'check' && command !== 'build' && command !== 'daily') return undefined;
+  if (command !== 'check' && command !== 'build' && command !== 'snapshot' && command !== 'daily' && command !== 'release') return undefined;
   const collected = new Map<string, string[]>();
   for (let index = 1; index < args.length; index += 2) {
     const flag = args[index];
@@ -43,9 +50,12 @@ const valueOf = (parsed: ParsedArguments, flag: string): string | undefined => p
 const readJson = async (file: string): Promise<unknown> => JSON.parse(await readFile(path.resolve(file), 'utf8'));
 
 const hasValidUsage = (parsed: ParsedArguments): boolean => {
+  if (parsed.command === 'release') return ['--production-snapshot', '--staging-snapshot', '--stylesheet', '--out']
+    .every((flag) => valueOf(parsed, flag) !== undefined);
   if (!valueOf(parsed, '--config')) return false;
   if (parsed.command === 'check') return true;
   if (parsed.command === 'build') return valueOf(parsed, '--out') !== undefined;
+  if (parsed.command === 'snapshot') return valueOf(parsed, '--out') !== undefined && valueOf(parsed, '--commit') !== undefined;
   const currentPath = valueOf(parsed, '--current-run');
   const manifestPath = valueOf(parsed, '--manifest');
   const completedAt = valueOf(parsed, '--completed-at');
@@ -65,6 +75,33 @@ const main = async (): Promise<number> => {
     console.error(usage);
     return 2;
   }
+  if (parsed.command === 'release') {
+    const productionSnapshotPath = valueOf(parsed, '--production-snapshot');
+    const stagingSnapshotPath = valueOf(parsed, '--staging-snapshot');
+    const stylesheetPath = valueOf(parsed, '--stylesheet');
+    const out = valueOf(parsed, '--out');
+    if (!productionSnapshotPath || !stagingSnapshotPath || !stylesheetPath || !out) return 2;
+    const [production, staging] = await Promise.all([
+      readJson(productionSnapshotPath).then(parseReleaseCatalogSnapshot),
+      readJson(stagingSnapshotPath).then(parseReleaseCatalogSnapshot),
+    ]);
+    if (!production.success) throw new Error(`invalid production catalog snapshot: ${production.error.message}`);
+    if (!staging.success) throw new Error(`invalid staging catalog snapshot: ${staging.error.message}`);
+    const stagingRunPath = valueOf(parsed, '--latest-staging-run');
+    const stagingRun = stagingRunPath
+      ? parseTestRun(await readJson(stagingRunPath), new RegExp(staging.data.idPattern, 'u'))
+      : undefined;
+    if (stagingRun && !stagingRun.success) throw new Error(`invalid staging TestRun: ${stagingRun.error.message}`);
+    const diff = buildReleaseDiff({
+      production: production.data,
+      staging: { snapshot: staging.data, ...(stagingRun?.data ? { latestRun: stagingRun.data } : {}) },
+    });
+    if (!diff.ok) throw new Error(`invalid release comparison: ${diff.problems.join('; ')}`);
+    const stylesheet = await readFile(path.resolve(stylesheetPath), 'utf8');
+    await writeManagedFiles(renderReleaseSite(diff.view, stylesheet), out, path.resolve(stagingSnapshotPath), 'release-v1\n');
+    console.log(`release build passed: ${out}`);
+    return 0;
+  }
   const config = valueOf(parsed, '--config');
   if (!config) return 2;
   const command = parsed.command;
@@ -76,6 +113,15 @@ const main = async (): Promise<number> => {
   }
   if (command === 'check') {
     console.log(`check passed: ${result.catalog.documents.length} document(s), ${result.catalog.cases.length} case(s)`);
+    return 0;
+  }
+  if (command === 'snapshot') {
+    const out = valueOf(parsed, '--out');
+    const commit = valueOf(parsed, '--commit');
+    if (!out || !commit) return 2;
+    const snapshot = createReleaseCatalogSnapshot(result.catalog, commit);
+    await writeManagedFiles(new Map([['release-catalog.json', `${JSON.stringify(snapshot, null, 2)}\n`]]), out, result.catalog.projectRoot, 'release-catalog-v1\n');
+    console.log(`snapshot build passed: ${out}`);
     return 0;
   }
   if (command === 'daily') {

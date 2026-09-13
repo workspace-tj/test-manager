@@ -2,7 +2,7 @@ version: 1
 idPattern: "^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$"
 discovery:
   documents: ["knowledge/**/*.md"]
-  manualCases: []
+  manualCases: ["knowledge/**/*.manual.yaml"]
   sources:
     - kind: vitest
       paths: ["src/**/*.test.ts"]

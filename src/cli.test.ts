@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
+import { parseReleaseCatalogSnapshot } from './release-catalog.js';
 
 const execute = promisify(execFile);
 const cli = path.resolve('src/cli.ts');
@@ -107,6 +108,33 @@ describe('CLI process boundary', () => {
     await writeFile(current, JSON.stringify({ ...valid, ciUrl: 'https://example.com/run', units: [{ state: 'incomplete', reason: 'artifactMissing', unitId: 'u', runner: 'vitest', layer: 'unit', target: 'node', plannedCaseIds: ['CASE-001'], observations: [] }] }));
     expect((await runCliDaily(['--current-run', current, '--out', out])).code).toBe(1);
     expect(await readFile(path.join(out, 'keep.txt'), 'utf8')).toBe('do not replace');
+  });
+
+  it('builds a release catalog difference screen from production and staging inputs', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-cli-release-'));
+    const out = path.join(root, 'release');
+    const productionDirectory = path.join(root, 'production-snapshot');
+    const stagingDirectory = path.join(root, 'staging-snapshot');
+    expect((await run(['snapshot', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--commit', '6e2b11a', '--out', productionDirectory])).code).toBe(0);
+    expect((await run(['snapshot', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--commit', '7f3a12c', '--out', stagingDirectory])).code).toBe(0);
+    const productionSnapshot = path.join(productionDirectory, 'release-catalog.json');
+    const stagingSnapshot = path.join(stagingDirectory, 'release-catalog.json');
+    const previous: unknown = JSON.parse(await readFile(productionSnapshot, 'utf8'));
+    const parsedPrevious = parseReleaseCatalogSnapshot(previous);
+    if (!parsedPrevious.success) throw new Error('generated release snapshot must parse');
+    await writeFile(productionSnapshot, JSON.stringify({ ...parsedPrevious.data, cases: parsedPrevious.data.cases.filter((item) => item.id !== 'CASE-101' && item.id !== 'CASE-110') }));
+    const result = await run([
+      'release',
+      '--production-snapshot', productionSnapshot,
+      '--staging-snapshot', stagingSnapshot,
+      '--stylesheet', 'prototypes/quality-dashboard/assets/dashboard.css', '--out', out,
+    ]);
+    expect(result.code).toBe(0);
+    const html = await readFile(path.join(out, 'release.html'), 'utf8');
+    expect(html).toContain('前回productionからの変更');
+    expect(html).toContain('CASE-101');
+    expect(html).toContain('CASE-110');
+    expect(html).not.toContain('リリース可能');
   });
 });
 

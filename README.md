@@ -6,13 +6,11 @@
 
 ![生成されたテスト知識カタログの一覧画面](docs/assets/test-knowledge-catalog.png)
 
-test-manager はテストランナーではありません。テストの成功・失敗やカバレッジは収集せず、テスト定義と、その背景にある知識の構造を管理します。
+test-manager はテストランナーそのものではありません。runner reporterが出力した事実をCI manifestと統合し、テスト定義と実行結果を日次・リリース差分画面へ接続します。
 
-## 品質ダッシュボードの設計検討
+## 品質ダッシュボード
 
-実行結果もカタログへ照合し、日次実行、リリース差分、ケース探索を判断対象ごとに確認する画面を検討しています。[静的UIプロトタイプ](prototypes/quality-dashboard/index.html) と [利用場面・画面設計](docs/quality-dashboard-design.md) を参照してください。
-
-このプロトタイプは将来像を検討するためのfixtureであり、現在のCLIには実行結果の取込、履歴保存、ダッシュボード生成は含まれません。
+実行結果をカタログへ照合し、日次実行とリリース差分を生成できます。画面が示すのは登録済みケース・取得済み結果・catalog差分の事実であり、網羅性やリリース可否は判定しません。[承認済みUIプロトタイプ](prototypes/quality-dashboard/index.html) と [利用場面・画面設計](docs/quality-dashboard-design.md) を参照してください。
 
 ## 想定する使い方
 
@@ -37,9 +35,20 @@ node dist/cli.js check --config fixtures/valid/test-manager.yaml
 node dist/cli.js build \
   --config fixtures/valid/test-manager.yaml \
   --out /tmp/test-manager-site
+
+node dist/cli.js daily \
+  --config fixtures/quality-dashboard/test-manager.yaml \
+  --manifest fixtures/quality-dashboard/manifest.json \
+  --completed-at 2026-09-13T00:01:00Z \
+  --unit-artifact fixtures/quality-dashboard/vitest.test-manager-unit.json \
+  --unit-artifact fixtures/quality-dashboard/playwright.test-manager-unit.json \
+  --stylesheet prototypes/quality-dashboard/assets/dashboard.css \
+  --out /tmp/test-manager-daily
 ```
 
-`check` は検査成功時に `0`、診断がある場合に `1`、CLI の使い方が不正な場合に `2` を返します。`build` は検査成功後だけ出力します。
+`check` は検査成功時に `0`、診断がある場合に `1`、CLI の使い方が不正な場合に `2` を返します。`build`、`daily`、`snapshot`、`release` は入力検査成功後だけ、test-manager所有マーカーを持つ安全な出力ディレクトリへ生成します。
+
+リリース差分では、productionとstagingの各checkoutで `snapshot --config <path> --commit <sha> --out <path>` を実行します。その `release-catalog.json` 2件を `release --production-snapshot <path> --staging-snapshot <path> --stylesheet <path> --out <path>` へ渡します。stagingの実行事実も表示する場合は、同じcommit・`staging`環境のrunを `--latest-staging-run` で指定します。
 
 ## プロジェクトへ設定する
 
