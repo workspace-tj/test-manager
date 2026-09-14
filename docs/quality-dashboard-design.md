@@ -2,7 +2,7 @@
 
 この文書は、Test Managerを誰が、いつ、何を判断するために使うかを定義し、その判断に必要な画面と情報の強弱を定めます。画面の見た目や取得方法より先に、利用場面と責務境界を固定します。
 
-現行CLIはテスト定義の静的検査とカタログ生成までを実装しています。実行結果の取込、履歴、リリース差分、GitHub連携は将来機能であり、プロトタイプではfixtureとして表現します。
+現行CLIはテスト定義の静的検査とカタログ生成に加え、runner結果の取込、日次画面、二つのcommitのcatalog snapshotによるリリース差分を実装しています。長期履歴、通知、リリース区間のPR連携、Issue作成連携は後続機能です。
 
 ## 目的
 
@@ -253,13 +253,13 @@ sourceを横断したケース一覧
 | case ID、title、source、定義状態 | `Catalog.cases` | 取得済み |
 | 所属、refs、分類、理由、条件 | `fields` / `details` | 取得済み。所属は `belongsTo` |
 | domain・feature関係 | `Catalog.documents` の `kind` / `parent` | 取得済み。kind名はプロジェクト設定依存 |
-| domainの表示順 | 未定義 | 追加契約が必要 |
-| actual status、retry、duration | runner reporter | 未実装 |
-| 実行環境、commit、run ID、時刻、CI URL | CI実行時のmetadata | 未実装 |
-| 結果の完全性 | 実行予定unitとrunnerの完了記録 | 未実装 |
-| 前回差分 | 同じ環境・同じ実行範囲の二つのrun | 未実装 |
+| domainの表示順 | `ProjectRules.documents.displayOrder` | 実装済み |
+| actual status、retry、duration | runner reporter | 実装済み |
+| 実行環境、commit、run ID、時刻、CI URL | CI実行時のmetadata | 実装済み |
+| 結果の完全性 | 実行予定unitとrunnerの完了記録 | 実装済み |
+| 前回差分 | 同じ環境・同じ実行範囲の二つのrun | 実装済み |
 | リリース区間のPRと宣言feature | 変更情報adapter | 未実装 |
-| ケースの追加・変更・削除 | 二つのcommitから生成したcatalog | 未実装 |
+| ケースの追加・変更・削除 | 二つのcommitから生成したcatalog | 実装済み |
 
 旧 `owner` から `belongsTo` へのmigrationは実行結果取込と分離して行いました。取込側は内部概念を「所属」として参照し、旧フィールド名を新しい実行結果形式へ持ち込みません。
 
@@ -395,17 +395,17 @@ case差分はcase IDをidentityとして比較します。
 - 両方に存在し、管理対象の定義が異なる: 変更
 - 比較元だけに存在する: 削除
 
-snippetや絶対パスなど、環境差で変わる値を意味的な変更判定へ含めません。何を「管理対象の定義」とするかは実装時に明示的な比較projectionとして固定します。
+snippetや絶対パスなど、環境差で変わる値を意味的な変更判定へ含めません。「管理対象の定義」はrelease catalog生成時の比較projectionとして固定しています。
 
-### 導入順
+### 導入状況
 
-1. domain・featureの不変条件と安定した表示順をcatalogで表現する
-2. 正規化形式のZod schemaと純粋なdaily view builderを実装する
-3. Vitest reporter adapterを実装し、fixture runから日次画面を生成する
-4. Playwright reporter adapterと複数unitのmergeを実装する
-5. CI manifestとの照合と不完全runの表示を実装する
-6. catalog diffとrelease view builderを実装する
-7. GitHub adapterを任意連携として追加する
+1. [x] domain・featureの不変条件と安定した表示順をcatalogで表現する
+2. [x] 正規化形式のZod schemaと純粋なdaily view builderを実装する
+3. [x] Vitest reporter adapterを実装し、fixture runから日次画面を生成する
+4. [x] Playwright reporter adapterと複数unitのmergeを実装する
+5. [x] CI manifestとの照合と不完全runの表示を実装する
+6. [x] catalog diffとrelease view builderを実装する
+7. [ ] GitHub adapterを任意連携として追加する
 
 最初から履歴DBやGitHub Appを導入しません。日次画面は「今回と前回」の二つのartifactを入力に生成できるため、まずCI artifactだけで成立させます。長期傾向の要件が確定してから、同じ正規化runを保存する永続化方式を選びます。
 

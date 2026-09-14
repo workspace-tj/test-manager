@@ -12,6 +12,18 @@ test-manager はテストランナーそのものではありません。runner 
 
 実行結果をカタログへ照合し、日次実行とリリース差分を生成できます。画面が示すのは登録済みケース・取得済み結果・catalog差分の事実であり、網羅性やリリース可否は判定しません。[承認済みUIプロトタイプ](prototypes/quality-dashboard/index.html) と [利用場面・画面設計](docs/quality-dashboard-design.md) を参照してください。
 
+### 日次実行
+
+CI開始前に確定したmanifestと、Vitest・Playwright reporterが生成したunit artifactを一つの`TestRun`へ統合します。成功・失敗だけでなく、想定失敗、想定外成功、skip、retry成功、timeout、結果欠損、runnerの途中終了を区別して表示します。比較対象は同じenvironment・scopeの前回runに限定し、条件が異なる場合は比較不能と表示します。
+
+![VitestとPlaywrightの結果を統合した日次実行画面](docs/assets/quality-dashboard-daily.png)
+
+### リリース差分
+
+前回production commitと現在のstaging commitで生成したcatalog snapshotを比較し、追加・変更・削除されたケースをdomain・feature単位に表示します。自動テストは任意でstagingの最新結果を添え、手動ケースは確認手段としてそのまま示します。
+
+![productionとstagingのcatalogを比較したリリース差分画面](docs/assets/quality-dashboard-release.png)
+
 ## 想定する使い方
 
 たとえば、ある仕様に対して単体テスト、E2E、Storybook、手動確認が存在するとします。それぞれへ同じ `belongsTo` と固有のケース ID を付けると、test-manager は次を行います。
@@ -49,6 +61,8 @@ node dist/cli.js daily \
 `check` は検査成功時に `0`、診断がある場合に `1`、CLI の使い方が不正な場合に `2` を返します。`build`、`daily`、`snapshot`、`release` は入力検査成功後だけ、test-manager所有マーカーを持つ安全な出力ディレクトリへ生成します。
 
 リリース差分では、productionとstagingの各checkoutで `snapshot --config <path> --commit <sha> --out <path>` を実行します。その `release-catalog.json` 2件を `release --production-snapshot <path> --staging-snapshot <path> --stylesheet <path> --out <path>` へ渡します。stagingの実行事実も表示する場合は、同じcommit・`staging`環境のrunを `--latest-staging-run` で指定します。
+
+manifestにはrun ID、attempt、environment、commit、scope、開始時刻、HTTP(S)のCI URL、実行予定unitとcase IDだけを記録します。GitHub Actions context全体や機密情報は保存しません。unit artifactが生成されなかった場合は`artifactMissing`、runnerが結果を残して途中終了した場合は`runnerError`などのincomplete理由として扱い、両者を混同しません。attachmentは設定したartifact root内だけを許可し、相対参照として保存します。
 
 ## プロジェクトへ設定する
 
