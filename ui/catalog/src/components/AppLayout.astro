@@ -1,0 +1,32 @@
+---
+interface Props {
+  title: string;
+  section: 'catalog' | 'cases' | 'documents';
+  rootPrefix?: string;
+}
+
+const { title, section, rootPrefix = '' } = Astro.props;
+---
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{title} · Test Manager</title>
+    <link rel="stylesheet" href={`${rootPrefix}assets/style.css`} />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="header-inner">
+        <a class="brand" href={`${rootPrefix}index.html`}><span class="brand-mark" aria-hidden="true">✓</span><span>Test Manager</span></a>
+        <nav class="segmented-nav" aria-label="カタログナビゲーション">
+          <a href={`${rootPrefix}index.html`} aria-current={section === 'catalog' ? 'page' : undefined}>ドメイン</a>
+          <a href={`${rootPrefix}cases/index.html`} aria-current={section === 'cases' ? 'page' : undefined}>ケース検索</a>
+          <a href={`${rootPrefix}documents/index.html`} aria-current={section === 'documents' ? 'page' : undefined}>仕様・判断</a>
+        </nav>
+        <span class="header-spacer" aria-hidden="true"></span>
+      </div>
+    </header>
+    <main><slot /></main>
+  </body>
+</html>

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json --noEmit",
+    "check": "tsc -p tsconfig.json --noEmit && pnpm --filter @test-manager/catalog-ui check",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -17,6 +17,7 @@
     "@babel/parser": "8.0.5",
     "@babel/traverse": "8.0.5",
     "@babel/types": "8.0.5",
+    "astro": "7.3.2",
     "fast-glob": "3.3.3",
     "yaml": "2.9.0",
     "zod": "4.6.2"

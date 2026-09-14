@@ -1,3 +1,6 @@
+packages:
+  - ui/catalog
+
 allowBuilds:
   esbuild: true
 pmOnFail: ignore

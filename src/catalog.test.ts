@@ -48,8 +48,8 @@ describe('project catalog', () => {
     const result = await checkProject(path.join(root, 'test-manager.yaml'));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(renderSite(result.catalog).get('index.html')).toContain('>20<');
-    const documentIndex = renderSite(result.catalog).get('documents/index.html') ?? '';
+    expect((await renderSite(result.catalog)).get('cases/index.html')).toContain('>20<');
+    const documentIndex = (await renderSite(result.catalog)).get('documents/index.html') ?? '';
     expect(documentIndex.indexOf('Module two')).toBeLessThan(documentIndex.indexOf('Module one'));
   });
 
@@ -187,20 +187,20 @@ describe('project catalog', () => {
     const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    const first = renderSite(result.catalog);
-    const second = renderSite(result.catalog);
+    const first = await renderSite(result.catalog);
+    const second = await renderSite(result.catalog);
     expect([...first]).toEqual([...second]);
-    expect(first.get('index.html')).toContain('href="cases/CASE-001.html"');
-    expect(first.get('index.html')).not.toContain('href="../cases/');
-    expect(first.get('index.html')).toContain('id="source-filter"');
-    expect(first.get('index.html')).toContain('id="status-filter"');
-    expect(first.get('index.html')).toContain('id="role-filter"');
-    expect(first.get('index.html')).toContain('id="impact-filter"');
-    expect(first.get('index.html')).toContain('class="catalog-layout"');
+    expect(first.get('cases/index.html')).toContain('href="../cases/CASE-001.html"');
+    expect(first.get('index.html')).not.toContain('id="source-filter"');
+    expect(first.get('cases/index.html')).toContain('id="source-filter"');
+    expect(first.get('cases/index.html')).toContain('id="status-filter"');
+    expect(first.get('cases/index.html')).toContain('id="impact-filter"');
+    expect(first.get('cases/index.html')).toContain('class="catalog-layout"');
     expect(first.get('index.html')).toContain('class="app-header"');
     expect(first.get('index.html')).toContain('class="brand-mark"');
     expect(first.get('index.html')).toContain('class="segmented-nav"');
     expect(first.get('index.html')).toContain('aria-current="page">ドメイン</a>');
+    expect(first.get('index.html')).toContain('>ケース検索</a>');
     expect(first.get('index.html')).toContain('class="domain-overviews"');
     expect(first.get('index.html')?.indexOf('id="search"')).toBeLessThan(first.get('index.html')?.indexOf('class="domain-overviews"') ?? 0);
     expect(first.get('index.html')).toContain('data-domain-overview="orders"');
@@ -208,11 +208,16 @@ describe('project catalog', () => {
     expect(first.get('index.html')).not.toContain('domainとfeatureから');
     expect(first.get('index.html')).not.toContain('IDや語句が分かっているとき');
     expect(first.get('index.html')).not.toContain('配下の文書はありません');
-    expect(first.get('index.html')).toContain('>確認担当<');
-    expect(first.get('index.html')).toContain('>プロダクト<');
-    expect(first.has('cases/index.html')).toBe(false);
-    expect(first.get('index.html')).toContain('data-domain-filter="orders"');
-    expect(first.get('index.html')).toContain('data-domain-group="orders"');
+    expect(first.get('cases/index.html')).toContain('>確認担当<');
+    expect(first.get('cases/index.html')).toContain('>プロダクト<');
+    expect(first.has('cases/index.html')).toBe(true);
+    expect(first.get('index.html')).not.toContain('data-domain-filter="orders"');
+    expect(first.get('index.html')).not.toContain('data-domain-group="orders"');
+    expect(first.get('index.html')).not.toContain('ケースを直接探す');
+    expect(first.get('cases/index.html')).toContain('aria-current="page">ケース検索</a>');
+    expect(first.get('cases/index.html')).toContain('data-domain-filter="orders"');
+    expect(first.get('cases/index.html')).toContain('data-domain-group="orders"');
+    expect(first.get('cases/index.html')).toContain('id="role-filter"');
     expect(first.get('index.html')).toContain('注文取消');
     expect(first.get('cases/CASE-301.html')).toContain('<code>CASE-301</code>');
     expect(first.get('cases/CASE-301.html')).toContain('<h1>出荷済み注文では取消ボタンを無効表示する</h1>');
@@ -230,6 +235,21 @@ describe('project catalog', () => {
     const out = path.join(root, 'site');
     await writeSite(result.catalog, out);
     const one = await readFile(path.join(out, 'catalog.json'), 'utf8');
+    const publicCatalog = JSON.parse(one) as { documents: Array<{ id: string }>; cases: Array<{ id: string }> };
+    expect(publicCatalog.documents.map((document) => document.id)).toEqual([
+      'orders',
+      'catalog',
+      'order-cancellation',
+      'cancellation-eligibility',
+    ]);
+    expect(publicCatalog.cases.map((managedCase) => managedCase.id)).toEqual([
+      'CASE-001',
+      'CASE-002',
+      'CASE-003',
+      'CASE-101',
+      'CASE-201',
+      'CASE-301',
+    ]);
     await writeSite(result.catalog, out);
     expect(await readFile(path.join(out, 'catalog.json'), 'utf8')).toBe(one);
   });
@@ -263,7 +283,7 @@ describe('project catalog', () => {
     const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    const files = renderSite(result.catalog);
+    const files = await renderSite(result.catalog);
     const listeners = new Map<object, Record<string, () => void>>();
     const control = (key?: string) => ({ value: '', dataset: key ? { filterKey: key } : {}, addEventListener(event: string, listener: () => void) { const own = listeners.get(this) ?? {}; own[event] = listener; listeners.set(this, own); } });
     const search = control();

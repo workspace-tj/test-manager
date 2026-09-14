@@ -1,0 +1,9 @@
+---
+const { level, text } = Astro.props as { level: number; text: string };
+---
+{level === 1 ? <h1>{text}</h1>
+  : level === 2 ? <h2>{text}</h2>
+  : level === 3 ? <h3>{text}</h3>
+  : level === 4 ? <h4>{text}</h4>
+  : level === 5 ? <h5>{text}</h5>
+  : <h6>{text}</h6>}
