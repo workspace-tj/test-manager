@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import type { Catalog, KnowledgeDocument, ManagedCase } from './model.js';
+import { sortDocumentsForDisplay } from './documents.js';
+import { writeManagedFiles } from './managed-output.js';
 
 const escapeHtml = (value: unknown): string => String(value)
   .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
@@ -37,7 +37,7 @@ const breadcrumbs = (document: KnowledgeDocument, byId: ReadonlyMap<string, Know
 
 export const renderSite = (catalog: Catalog): ReadonlyMap<string, string> => {
   const files = new Map<string, string>();
-  const documents = [...catalog.documents].sort((a, b) => compareText(a.id, b.id));
+  const documents = sortDocumentsForDisplay(catalog.documents, catalog.rules);
   const cases = [...catalog.cases].sort((a, b) => compareText(a.id, b.id));
   const byId = new Map(documents.map((document) => [document.id, document]));
   const values = (select: (item: ManagedCase) => unknown): string[] => [...new Set(cases.map(select).filter((value): value is string | number => typeof value === 'string' || typeof value === 'number').map(String))].sort(compareText);
@@ -49,17 +49,17 @@ export const renderSite = (catalog: Catalog): ReadonlyMap<string, string> => {
   files.set('documents/index.html', shell('領域・仕様', '../', `<h1>領域・仕様</h1><ul>${documents.map((document) => `<li>${linkDocument(document)} <small>${escapeHtml(document.kind)}</small></li>`).join('')}</ul>`));
   files.set('cases/index.html', shell('ケース', '../', `<h1>ケース</h1><ul>${cases.map((item) => `<li>${linkCase(item)} <small>${escapeHtml(item.id)} / ${escapeHtml(item.source)} / ${escapeHtml(item.status)}</small></li>`).join('')}</ul>`));
   for (const document of documents) {
-    const owned = cases.filter((item) => item.fields.owner === document.id);
+    const belongingCases = cases.filter((item) => item.fields.belongsTo === document.id);
     const referenced = cases.filter((item) => Array.isArray(item.fields.refs) && item.fields.refs.includes(document.id));
     const crumb = breadcrumbs(document, byId).map((item) => item.id === document.id ? escapeHtml(item.title) : linkDocument(item, '../')).join(' › ');
     const relatedDocuments = (document.refs ?? []).flatMap((id) => {
       const related = byId.get(id);
       return related ? [related] : [];
     });
-    files.set(`documents/${safeName(document.id)}.html`, shell(document.title, '../', `<p>${crumb}</p><h1>${escapeHtml(document.title)}</h1><p><code>${escapeHtml(document.id)}</code> · ${escapeHtml(document.kind)}</p><article>${markdown(document.body)}</article><h2>関連文書</h2><ul>${relatedDocuments.map((item) => `<li>${linkDocument(item, '../')}</li>`).join('') || '<li>0件</li>'}</ul><h2>所属ケース</h2><ul>${owned.map((item) => `<li>${linkCase(item, '../')}</li>`).join('') || '<li>0件</li>'}</ul><h2>関連ケース</h2><ul>${referenced.map((item) => `<li>${linkCase(item, '../')}</li>`).join('') || '<li>0件</li>'}</ul><p>Source: <code>${escapeHtml(document.location.file)}</code></p>`));
+    files.set(`documents/${safeName(document.id)}.html`, shell(document.title, '../', `<p>${crumb}</p><h1>${escapeHtml(document.title)}</h1><p><code>${escapeHtml(document.id)}</code> · ${escapeHtml(document.kind)}</p><article>${markdown(document.body)}</article><h2>関連文書</h2><ul>${relatedDocuments.map((item) => `<li>${linkDocument(item, '../')}</li>`).join('') || '<li>0件</li>'}</ul><h2>所属ケース</h2><ul>${belongingCases.map((item) => `<li>${linkCase(item, '../')}</li>`).join('') || '<li>0件</li>'}</ul><h2>関連ケース</h2><ul>${referenced.map((item) => `<li>${linkCase(item, '../')}</li>`).join('') || '<li>0件</li>'}</ul><p>Source: <code>${escapeHtml(document.location.file)}</code></p>`));
   }
   for (const item of cases) {
-    const refs = [item.fields.owner, ...(item.fields.refs ?? [])];
+    const refs = [item.fields.belongsTo, ...(item.fields.refs ?? [])];
     const parameters = item.source === 'vitest' ? item.parameters : undefined;
     files.set(`cases/${safeName(item.id)}.html`, shell(item.title, '../', `<h1>${escapeHtml(item.title)}</h1><p><code>${escapeHtml(item.id)}</code> · ${escapeHtml(item.source)} · ${escapeHtml(item.status)}</p><h2>所属・分類</h2><pre>${pretty(item.fields)}</pre><h2>条件・理由</h2><pre>${pretty(item.details)}</pre>${item.procedure ? `<h2>操作と期待結果</h2><pre>${pretty(item.procedure)}</pre>` : ''}${parameters ? `<h2>each入力表</h2><pre>${pretty(parameters)}</pre>` : ''}<h2>関連知識</h2><ul>${refs.map((id) => { const document = byId.get(id); return document ? `<li>${linkDocument(document, '../')}</li>` : ''; }).join('')}</ul><h2>ソース</h2><p><code>${escapeHtml(item.location.file)}:${item.location.line}</code></p><pre>${escapeHtml(item.snippet)}</pre>`));
   }
@@ -71,38 +71,6 @@ export const renderSite = (catalog: Catalog): ReadonlyMap<string, string> => {
   return files;
 };
 
-const exists = async (file: string): Promise<boolean> => stat(file).then(() => true, () => false);
-
 export const writeSite = async (catalog: Catalog, outPath: string): Promise<void> => {
-  const out = path.resolve(outPath);
-  if (out === catalog.projectRoot || catalog.projectRoot.startsWith(`${out}${path.sep}`)) throw new Error('output directory must not be the project root or its ancestor');
-  if (await exists(out)) {
-    const marker = path.join(out, '.test-manager-output');
-    if (!await exists(marker) || await readFile(marker, 'utf8') !== 'v1\n') throw new Error('refusing to replace a directory not created by test-manager');
-  }
-  await mkdir(path.dirname(out), { recursive: true });
-  const temporary = await mkdtemp(path.join(path.dirname(out), `.${path.basename(out)}.test-manager-`));
-  const backup = `${temporary}-previous`;
-  let moved = false;
-  let backedUp = false;
-  try {
-    for (const [relative, content] of renderSite(catalog)) {
-      const target = path.join(temporary, relative);
-      await mkdir(path.dirname(target), { recursive: true });
-      await writeFile(target, content, 'utf8');
-    }
-    if (await exists(out)) {
-      await rename(out, backup);
-      backedUp = true;
-    }
-    await rename(temporary, out);
-    moved = true;
-    if (backedUp) await rm(backup, { recursive: true });
-  } catch (error) {
-    if (backedUp && !await exists(out) && await exists(backup)) await rename(backup, out);
-    throw error;
-  } finally {
-    if (!moved && await exists(temporary)) await rm(temporary, { recursive: true });
-    if (moved && await exists(backup)) await rm(backup, { recursive: true });
-  }
+  await writeManagedFiles(renderSite(catalog), outPath, catalog.projectRoot, 'v1\n');
 };

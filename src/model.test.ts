@@ -5,6 +5,7 @@ import type { ManagedCase } from './model.js';
 describe('internal model invariants', () => {
   it('keeps document IDs and case IDs distinct', () => {
     expectTypeOf<CaseId>().not.toEqualTypeOf<DocumentId>();
+    expectTypeOf<ManagedCase['fields']['belongsTo']>().toEqualTypeOf<DocumentId>();
   });
 
   it('excludes impossible source and status combinations', () => {

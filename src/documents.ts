@@ -91,3 +91,39 @@ export const validateDocumentGraph = (
   for (const document of documents) visit(document, []);
   return diagnostics;
 };
+
+export const validateDocumentDisplayOrder = (
+  documents: ReadonlyArray<KnowledgeDocument>,
+  rules: ProjectRules,
+  configFile: string,
+): ReadonlyArray<Diagnostic> => {
+  const byId = new Map<string, KnowledgeDocument>(documents.map((document) => [document.id, document]));
+  const diagnostics: Diagnostic[] = [];
+  for (const [kind, ids] of Object.entries(rules.documents.displayOrder)) {
+    const subject = `documents.displayOrder.${kind}`;
+    for (const id of ids) {
+      const document = byId.get(id);
+      if (!document) diagnostics.push(diagnostic('TM116', configFile, subject, `document ${id} does not exist`));
+      else if (document.kind !== kind) diagnostics.push(diagnostic('TM117', configFile, subject, `document ${id} has kind ${document.kind}`));
+    }
+  }
+  return diagnostics;
+};
+
+export const sortDocumentsForDisplay = (
+  documents: ReadonlyArray<KnowledgeDocument>,
+  rules: ProjectRules,
+): ReadonlyArray<KnowledgeDocument> => {
+  const displayRanks = new Map(Object.entries(rules.documents.displayOrder).map(([kind, ids]) => [
+    kind,
+    new Map(ids.map((id, index) => [id, index])),
+  ]));
+  const kindRanks = new Map(Object.keys(rules.documents.kinds).map((kind, index) => [kind, index]));
+  return [...documents].sort((left, right) => {
+    if (left.kind !== right.kind) return (kindRanks.get(left.kind) ?? Number.MAX_SAFE_INTEGER) - (kindRanks.get(right.kind) ?? Number.MAX_SAFE_INTEGER);
+    const ranks = displayRanks.get(left.kind);
+    const rankDifference = (ranks?.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (ranks?.get(right.id) ?? Number.MAX_SAFE_INTEGER);
+    if (rankDifference !== 0) return rankDifference;
+    return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+  });
+};

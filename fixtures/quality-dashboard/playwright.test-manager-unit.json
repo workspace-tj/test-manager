@@ -1,0 +1,10 @@
+{
+  "state": "incomplete",
+  "reason": "runnerError",
+  "unitId": "playwright-e2e-chromium",
+  "observations": [
+    { "caseId": "CASE-106", "expected": "passed", "attemptCoverage": { "kind": "complete" }, "attempts": [{ "outcome": "failed", "durationMs": 410, "startedAt": "2026-09-13T00:00:06Z", "artifactRefs": ["playwright/case-106-retry-0.zip"] }, { "outcome": "passed", "durationMs": 320, "startedAt": "2026-09-13T00:00:07Z", "artifactRefs": ["playwright/case-106-retry-1.zip"] }] },
+    { "caseId": "CASE-107", "expected": "passed", "attemptCoverage": { "kind": "complete" }, "attempts": [{ "outcome": "timedOut", "durationMs": 30000, "startedAt": "2026-09-13T00:00:08Z", "artifactRefs": ["playwright/case-107-trace.zip"] }] },
+    { "caseId": "CASE-109", "expected": "passed", "attemptCoverage": { "kind": "complete" }, "attempts": [{ "outcome": "passed", "durationMs": 280, "startedAt": "2026-09-13T00:00:38Z", "artifactRefs": [] }] }
+  ]
+}

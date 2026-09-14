@@ -27,8 +27,8 @@ describe('unsupported source syntax', () => {
     if (!loaded.rules) return;
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-comment-placement-'));
     const file = path.join(root, 'placement.test.ts');
-    await writeFile(file, `import { test } from 'vitest';\n/*\n@case\nowner: orders\nrole: product\nimpact: 1\n*/\ntest('case', { meta: { caseId: 'CASE-999' } }, () => {\n  /*\n  @case-doc\n  owner: orders\n  */\n});\n`, 'utf8');
-    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'area', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
+    await writeFile(file, `import { test } from 'vitest';\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest('case', { meta: { caseId: 'CASE-999' } }, () => {\n  /*\n  @case-doc\n  belongsTo: orders\n  */\n});\n`, 'utf8');
+    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'domain', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
     const result = await readTestSource(file, root, 'vitest', loaded.rules, documents);
     expect(result.cases).toEqual([]);
     expect(result.diagnostics.some((item) => item.code === 'TM208' && item.location.line === 11)).toBe(true);
@@ -39,7 +39,7 @@ describe('unsupported source syntax', () => {
     if (!loaded.rules) return;
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-comment-line-'));
     const file = path.join(root, 'line.test.ts');
-    await writeFile(file, `import { test } from 'vitest';\n\n/*\n@case\nowner: orders\nowner: orders\nrole: product\nimpact: 1\n*/\ntest('case', { meta: { caseId: 'CASE-999' } }, () => {});\n`, 'utf8');
+    await writeFile(file, `import { test } from 'vitest';\n\n/*\n@case\nbelongsTo: orders\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest('case', { meta: { caseId: 'CASE-999' } }, () => {});\n`, 'utf8');
     const result = await readTestSource(file, root, 'vitest', loaded.rules, []);
     expect(result.diagnostics.some((item) => item.code === 'TM001' && item.location.line === 6)).toBe(true);
   });
@@ -49,8 +49,8 @@ describe('unsupported source syntax', () => {
     if (!loaded.rules) return;
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-detail-line-'));
     const file = path.join(root, 'detail.test.ts');
-    await writeFile(file, `import { test } from 'vitest';\n/*\n@case\nowner: orders\nrole: product\nimpact: 1\n*/\ntest('case', { meta: { caseId: 'CASE-999' } }, () => {\n  /*\n  @case-doc\n  conditions: invalid\n  */\n});\n`, 'utf8');
-    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'area', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
+    await writeFile(file, `import { test } from 'vitest';\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest('case', { meta: { caseId: 'CASE-999' } }, () => {\n  /*\n  @case-doc\n  conditions: invalid\n  */\n});\n`, 'utf8');
+    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'domain', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
     const result = await readTestSource(file, root, 'vitest', loaded.rules, documents);
     expect(result.diagnostics.some((item) => item.code === 'TM122' && item.subject === 'conditions' && item.location.line === 11)).toBe(true);
   });
@@ -61,8 +61,8 @@ describe('unsupported source syntax', () => {
     if (!loaded.rules) return;
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-source-'));
     const file = path.join(root, 'dynamic.test.ts');
-    await writeFile(file, `import { test } from 'vitest';\nconst rows = [[1]];\n/*\n@case\nowner: orders\nrole: product\nimpact: 1\n*/\ntest.each(rows)('dynamic %i', () => {});\n`, 'utf8');
-    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'area', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
+    await writeFile(file, `import { test } from 'vitest';\nconst rows = [[1]];\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest.each(rows)('dynamic %i', () => {});\n`, 'utf8');
+    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'domain', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
     const result = await readTestSource(file, root, 'vitest', loaded.rules, documents);
     expect(result.cases).toEqual([]);
     expect(new Set(result.diagnostics.map((item) => item.code))).toEqual(new Set(['TM203', 'TM205']));
@@ -86,8 +86,8 @@ describe('unsupported source syntax', () => {
     await writeFile(vitestFile, `import { test as managedTest } from 'vitest';\nfunction helper(managedTest: (...args: unknown[]) => void) {\nmanagedTest('local', { meta: { caseId: 'CASE-999' } }, () => {});\n}\n`, 'utf8');
     expect(await readTestSource(vitestFile, root, 'vitest', loaded.rules, [])).toEqual({ cases: [], diagnostics: [] });
     const playwrightFile = path.join(root, 'annotations.spec.ts');
-    await writeFile(playwrightFile, `import { test } from '@playwright/test';\n/*\n@case\nowner: orders\nrole: product\nimpact: 1\n*/\ntest('managed', { annotation: { type: 'case-id', description: 'CASE-999' } }, () => {\n  test.skip(true, 'runtime annotation');\n  test.fixme(false, 'runtime annotation');\n  test.fail(true, 'runtime annotation');\n});\n`, 'utf8');
-    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'area', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
+    await writeFile(playwrightFile, `import { test } from '@playwright/test';\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest('managed', { annotation: { type: 'case-id', description: 'CASE-999' } }, () => {\n  test.skip(true, 'runtime annotation');\n  test.fixme(false, 'runtime annotation');\n  test.fail(true, 'runtime annotation');\n});\n`, 'utf8');
+    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'domain', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
     const result = await readTestSource(playwrightFile, root, 'playwright', loaded.rules, documents);
     expect(result.diagnostics).toEqual([]);
     expect(result.cases.map((item) => item.id)).toEqual(['CASE-999']);
@@ -98,7 +98,7 @@ describe('unsupported source syntax', () => {
     if (!loaded.rules) return;
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-case-ids-'));
     const file = path.join(root, 'ids.spec.ts');
-    await writeFile(file, `import { test } from '@playwright/test';\n/*\n@case\nowner: orders\nrole: product\nimpact: 1\n*/\ntest('duplicate', { annotation: [{ type: 'case-id', description: 'CASE-998' }, { type: 'case-id', description: 'CASE-999' }] }, () => {});\n`, 'utf8');
+    await writeFile(file, `import { test } from '@playwright/test';\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest('duplicate', { annotation: [{ type: 'case-id', description: 'CASE-998' }, { type: 'case-id', description: 'CASE-999' }] }, () => {});\n`, 'utf8');
     const result = await readTestSource(file, root, 'playwright', loaded.rules, []);
     expect(result.cases).toEqual([]);
     expect(result.diagnostics.some((item) => item.code === 'TM209')).toBe(true);
@@ -128,7 +128,7 @@ describe('unsupported source syntax', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-each-values-'));
     for (const [name, cell] of [['expression', 'external'], ['spread', '...[1]'], ['computed', "{ ['key']: 1 }"]] as const) {
       const file = path.join(root, `${name}.test.ts`);
-      await writeFile(file, `import { test } from 'vitest';\nconst external = 1;\n/*\n@case\nowner: orders\nrole: product\nimpact: 1\n*/\ntest.each([[${cell}]])('unsupported %s', { meta: { caseId: 'CASE-999' } }, () => {});\n`, 'utf8');
+      await writeFile(file, `import { test } from 'vitest';\nconst external = 1;\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest.each([[${cell}]])('unsupported %s', { meta: { caseId: 'CASE-999' } }, () => {});\n`, 'utf8');
       const result = await readTestSource(file, root, 'vitest', loaded.rules, []);
       expect(result.cases).toEqual([]);
       expect(result.diagnostics.some((item) => item.code === 'TM203')).toBe(true);
@@ -144,8 +144,8 @@ describe('unsupported source syntax', () => {
     const loaded = await loadRules(config);
     if (!loaded.rules) return;
     const file = path.join(root, 'placed.test.ts');
-    await writeFile(file, `import { test } from 'vitest';\n/*\n@case\nowner: orders\nrole: product\nimpact: 1\n*/\ntest('placed', { meta: { caseId: 'CASE-999' } }, () => {\n  /*\n  @case-doc\n  preconditions: [signed in]\n  */\n});\n`, 'utf8');
-    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'area', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
+    await writeFile(file, `import { test } from 'vitest';\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest('placed', { meta: { caseId: 'CASE-999' } }, () => {\n  /*\n  @case-doc\n  preconditions: [signed in]\n  */\n});\n`, 'utf8');
+    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'domain', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
     const result = await readTestSource(file, root, 'vitest', loaded.rules, documents);
     expect(result.diagnostics).toEqual([]);
     expect(result.cases[0]?.fields).not.toHaveProperty('preconditions');
@@ -157,7 +157,7 @@ describe('unsupported source syntax', () => {
     if (!loaded.rules) return;
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-tagged-each-'));
     const file = path.join(root, 'tagged.test.ts');
-    await writeFile(file, "import { test } from 'vitest';\n/*\n@case\nowner: orders\nrole: product\nimpact: 1\n*/\ntest.each`value\n${1}`('tagged $value', { meta: { caseId: 'CASE-999' } }, () => {});\n", 'utf8');
+    await writeFile(file, "import { test } from 'vitest';\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest.each`value\n${1}`('tagged $value', { meta: { caseId: 'CASE-999' } }, () => {});\n", 'utf8');
     const result = await readTestSource(file, root, 'vitest', loaded.rules, []);
     expect(result.cases).toEqual([]);
     expect(result.diagnostics.some((item) => item.code === 'TM203')).toBe(true);
@@ -167,14 +167,14 @@ describe('unsupported source syntax', () => {
     const loaded = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
     if (!loaded.rules) return;
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-unsupported-declarations-'));
-    const marker = `/*\n@case\nowner: orders\nrole: product\nimpact: 1\n*/`;
+    const marker = `/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/`;
     for (const [name, declaration] of [['wrapper', `const managed = () => {};\n${marker}\nmanaged('x', () => {});`], ['namespace', `import * as runner from 'vitest';\n${marker}\nrunner.test('x', () => {});`]] as const) {
       const file = path.join(root, `${name}.test.ts`);
       await writeFile(file, `${declaration}\n`, 'utf8');
       expect((await readTestSource(file, root, 'vitest', loaded.rules, [])).diagnostics.some((item) => item.code === 'TM203')).toBe(true);
     }
     const story = path.join(root, 'Factory.stories.tsx');
-    await writeFile(story, `const makeStory = () => ({});\n/*\n@case\nowner: orders\nrole: product\nimpact: 1\n*/\nexport const Factory = makeStory();\n`, 'utf8');
+    await writeFile(story, `const makeStory = () => ({});\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\nexport const Factory = makeStory();\n`, 'utf8');
     expect((await readTestSource(story, root, 'storybook', loaded.rules, [])).diagnostics.some((item) => item.code === 'TM222')).toBe(true);
   });
 
@@ -182,8 +182,8 @@ describe('unsupported source syntax', () => {
     const loaded = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
     if (!loaded.rules) return;
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-modifiers-'));
-    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'area', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
-    const comment = `/*\n@case\nowner: orders\nrole: product\nimpact: 1\n*/`;
+    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'domain', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
+    const comment = `/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/`;
     const vitestFile = path.join(root, 'modifiers.test.ts');
     await writeFile(vitestFile, `import { test } from 'vitest';\n${comment}\ntest.skip('skip', { meta: { caseId: 'CASE-901' } }, () => {});\n${comment}\ntest.todo('todo', { meta: { caseId: 'CASE-902' } });\n${comment}\ntest.only('only', { meta: { caseId: 'CASE-903' } }, () => {});\n${comment}\ntest.concurrent('concurrent', { meta: { caseId: 'CASE-904' } }, () => {});\n${comment}\ntest.fails('fails', { meta: { caseId: 'CASE-905' } }, () => {});\n`, 'utf8');
     const vitest = await readTestSource(vitestFile, root, 'vitest', loaded.rules, documents);

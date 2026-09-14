@@ -72,11 +72,11 @@ export const parseCaseFields = (
   if (!parsed.success) {
     return { ok: false, diagnostics: parsed.error.issues.map((item) => at(diagnosticCode(item), item.path.join('.') || 'case', diagnosticReason(item))) };
   }
-  const owner = documentIdSchema(idPattern).safeParse(parsed.data.owner);
-  if (!owner.success) return { ok: false, diagnostics: [at('TM121', 'owner', 'owner must be configured as a required reference field')] };
+  const belongsTo = documentIdSchema(idPattern).safeParse(parsed.data.belongsTo);
+  if (!belongsTo.success) return { ok: false, diagnostics: [at('TM121', 'belongsTo', 'belongsTo must be configured as a required reference field')] };
   const refs = parsed.data.refs === undefined ? undefined : z.array(documentIdSchema(idPattern)).safeParse(parsed.data.refs);
   if (refs !== undefined && !refs.success) return { ok: false, diagnostics: [at('TM122', 'refs', 'refs must be configured as a reference-list field')] };
-  const fields: CaseFields = { ...parsed.data, owner: owner.data, ...(refs?.success ? { refs: refs.data } : {}) };
+  const fields: CaseFields = { ...parsed.data, belongsTo: belongsTo.data, ...(refs?.success ? { refs: refs.data } : {}) };
   const knownDocuments = new Map(documents.map((document) => [document.id, document]));
   const diagnostics: Diagnostic[] = [];
   for (const [name, rule] of Object.entries(rules)) {

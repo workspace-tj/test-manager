@@ -4,7 +4,9 @@
   "private": true,
   "packageManager": "pnpm@12.4.1",
   "type": "module",
-  "bin": { "test-manager": "dist/cli.js" },
+  "bin": {
+    "test-manager": "dist/cli.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
@@ -20,11 +22,14 @@
     "zod": "4.6.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/babel__traverse": "7.28.0",
     "@types/node": "24.10.1",
     "tsx": "4.23.13",
     "typescript": "7.0.2",
     "vitest": "5.0.0"
   },
-  "engines": { "node": "^22.18.0 || >=24.11.0" }
+  "engines": {
+    "node": "^22.18.0 || >=24.11.0"
+  }
 }

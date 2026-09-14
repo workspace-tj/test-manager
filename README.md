@@ -6,11 +6,27 @@
 
 ![生成されたテスト知識カタログの一覧画面](docs/assets/test-knowledge-catalog.png)
 
-test-manager はテストランナーではありません。テストの成功・失敗やカバレッジは収集せず、テスト定義と、その背景にある知識の構造を管理します。
+test-manager はテストランナーそのものではありません。runner reporterが出力した事実をCI manifestと統合し、テスト定義と実行結果を日次・リリース差分画面へ接続します。
+
+## 品質ダッシュボード
+
+実行結果をカタログへ照合し、日次実行とリリース差分を生成できます。画面が示すのは登録済みケース・取得済み結果・catalog差分の事実であり、網羅性やリリース可否は判定しません。[承認済みUIプロトタイプ](prototypes/quality-dashboard/index.html) と [利用場面・画面設計](docs/quality-dashboard-design.md) を参照してください。
+
+### 日次実行
+
+CI開始前に確定したmanifestと、Vitest・Playwright reporterが生成したunit artifactを一つの`TestRun`へ統合します。成功・失敗だけでなく、想定失敗、想定外成功、skip、retry成功、timeout、結果欠損、runnerの途中終了を区別して表示します。比較対象は同じenvironment・scopeの前回runに限定し、条件が異なる場合は比較不能と表示します。
+
+![VitestとPlaywrightの結果を統合した日次実行画面](docs/assets/quality-dashboard-daily.png)
+
+### リリース差分
+
+前回production commitと現在のstaging commitで生成したcatalog snapshotを比較し、追加・変更・削除されたケースをdomain・feature単位に表示します。自動テストは任意でstagingの最新結果を添え、手動ケースは確認手段としてそのまま示します。
+
+![productionとstagingのcatalogを比較したリリース差分画面](docs/assets/quality-dashboard-release.png)
 
 ## 想定する使い方
 
-たとえば、ある仕様に対して単体テスト、E2E、Storybook、手動確認が存在するとします。それぞれへ同じ `owner` と固有のケース ID を付けると、test-manager は次を行います。
+たとえば、ある仕様に対して単体テスト、E2E、Storybook、手動確認が存在するとします。それぞれへ同じ `belongsTo` と固有のケース ID を付けると、test-manager は次を行います。
 
 1. 設定した glob から知識文書とテスト定義を探す
 2. ソースコードを実行せず、対応する宣言だけを AST で読み取る
@@ -31,9 +47,22 @@ node dist/cli.js check --config fixtures/valid/test-manager.yaml
 node dist/cli.js build \
   --config fixtures/valid/test-manager.yaml \
   --out /tmp/test-manager-site
+
+node dist/cli.js daily \
+  --config fixtures/quality-dashboard/test-manager.yaml \
+  --manifest fixtures/quality-dashboard/manifest.json \
+  --completed-at 2026-09-13T00:01:00Z \
+  --unit-artifact fixtures/quality-dashboard/vitest.test-manager-unit.json \
+  --unit-artifact fixtures/quality-dashboard/playwright.test-manager-unit.json \
+  --stylesheet prototypes/quality-dashboard/assets/dashboard.css \
+  --out /tmp/test-manager-daily
 ```
 
-`check` は検査成功時に `0`、診断がある場合に `1`、CLI の使い方が不正な場合に `2` を返します。`build` は検査成功後だけ出力します。
+`check` は検査成功時に `0`、診断がある場合に `1`、CLI の使い方が不正な場合に `2` を返します。`build`、`daily`、`snapshot`、`release` は入力検査成功後だけ、test-manager所有マーカーを持つ安全な出力ディレクトリへ生成します。
+
+リリース差分では、productionとstagingの各checkoutで `snapshot --config <path> --commit <sha> --out <path>` を実行します。その `release-catalog.json` 2件を `release --production-snapshot <path> --staging-snapshot <path> --stylesheet <path> --out <path>` へ渡します。stagingの実行事実も表示する場合は、同じcommit・`staging`環境のrunを `--latest-staging-run` で指定します。
+
+manifestにはrun ID、attempt、environment、commit、scope、開始時刻、HTTP(S)のCI URL、実行予定unitとcase IDだけを記録します。GitHub Actions context全体や機密情報は保存しません。unit artifactが生成されなかった場合は`artifactMissing`、runnerが結果を残して途中終了した場合は`runnerError`などのincomplete理由として扱い、両者を混同しません。attachmentは設定したartifact root内だけを許可し、相対参照として保存します。
 
 ## プロジェクトへ設定する
 
@@ -56,23 +85,29 @@ discovery:
 
 documents:
   kinds:
-    area:
-      description: 知識とテストを管理する領域
-      parent: { required: false, targetKinds: [area] }
-    specification:
-      description: 判断や制約を記録する仕様
-      parent: { required: true, targetKinds: [area] }
+    domain:
+      description: 業務領域
+      parent: { required: false, targetKinds: [] }
+    feature:
+      description: domainに属する機能
+      parent: { required: true, targetKinds: [domain] }
+    decision:
+      description: 判断や制約
+      parent: { required: true, targetKinds: [feature] }
+  displayOrder:
+    domain: [orders, billing, scheduling]
+    feature: [order-cancellation]
 
 case:
   fields:
-    owner:
+    belongsTo:
       type: reference
-      targetKinds: [area]
+      targetKinds: [domain, feature]
       placement: classification
       required: true
     refs:
       type: reference-list
-      targetKinds: [specification]
+      targetKinds: [domain, feature, decision]
       placement: classification
       required: false
       uniqueItems: true
@@ -104,9 +139,11 @@ case:
 
 知識文書の種類と、許可する親子関係を定義します。`parent.required` で親の必須性を、`targetKinds` で親として許可する種類を指定します。
 
+`documents.displayOrder` には、kindごとの安定した表示順を指定できます。実行結果によって順序は変わらず、一覧上の位置を保ちます。列挙していない文書は、指定済み文書の後ろへID順で表示します。存在しないID、kindが異なるID、重複したIDは設定エラーです。
+
 ### case.fields
 
-プロジェクトで各ケースに記録する項目を定義します。フィールド名は固定されていませんが、`owner` は必須の参照項目です。
+プロジェクトで各ケースに記録する項目を定義します。フィールド名は固定されていませんが、`belongsTo` は必須の参照項目です。
 
 利用できる型は `reference`、`reference-list`、`enum`、`integer-enum`、`text`、`text-list` です。`required`、条件付き必須の `requiredWhen`、`minItems`、`uniqueItems` も設定できます。
 
@@ -126,8 +163,9 @@ Markdown 先頭の YAML frontmatter に、ID、種類、タイトル、任意の
 ```md
 ---
 id: order-cancellation
-kind: area
+kind: feature
 title: 注文キャンセル
+parent: orders
 ---
 
 注文キャンセルに関する判断と制約を管理します。
@@ -142,7 +180,7 @@ title: 注文キャンセル
 ```ts
 /**
  * @case
- * owner: order-cancellation
+ * belongsTo: order-cancellation
  * refs: [cancellation-policy]
  * impact: 3
  */
@@ -178,7 +216,7 @@ declare module '@vitest/runner' {
 ```ts
 /**
  * @case
- * owner: order-cancellation
+ * belongsTo: order-cancellation
  * impact: 3
  */
 test(
@@ -199,7 +237,7 @@ Story の明示的な `name` の先頭へケース ID を入れます。
 ```ts
 /**
  * @case
- * owner: order-cancellation
+ * belongsTo: order-cancellation
  * impact: 2
  */
 export const Disabled = {
@@ -214,7 +252,7 @@ export const Disabled = {
 ```yaml
 id: CASE-101
 title: オペレーターが期限切れの注文をキャンセルできない
-owner: order-cancellation
+belongsTo: order-cancellation
 impact: 3
 steps:
   - action: 期限切れの注文を開く
@@ -231,7 +269,7 @@ steps:
 node dist/cli.js check --config ./test-manager.yaml
 ```
 
-診断はファイル、行、列、診断コード、対象、理由を含みます。たとえば、ケースの owner が存在しない、ID が重複している、必須項目が欠けている、といった変更をマージ前に検出できます。
+診断はファイル、行、列、診断コード、対象、理由を含みます。たとえば、ケースの belongsTo が存在しない、ID が重複している、必須項目が欠けている、といった変更をマージ前に検出できます。
 
 ## 静的解析の対応境界
 

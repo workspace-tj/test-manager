@@ -19,6 +19,11 @@ const RequirednessShape = {
 const ValuesSchema = z.record(z.string(), z.object({ description: z.string().min(1) }).strict())
   .refine((values) => Object.keys(values).length > 0, 'values must not be empty');
 
+const DisplayOrderSchema = z.record(
+  z.string(),
+  z.array(z.string().min(1)).refine((ids) => new Set(ids).size === ids.length, 'must contain unique document IDs'),
+);
+
 const FieldRuleSchema = z.discriminatedUnion('type', [
   z.object({ ...RequirednessShape, type: z.literal('reference'), targetKinds: z.array(z.string().min(1)).min(1) }).strict(),
   z.object({ ...RequirednessShape, type: z.literal('reference-list'), targetKinds: z.array(z.string().min(1)).min(1), minItems: z.number().int().nonnegative().optional(), uniqueItems: z.boolean().optional() }).strict(),
@@ -43,18 +48,21 @@ const RulesShape = z.object({
       paths: z.array(z.string().min(1)).min(1),
     }).strict()),
   }).strict(),
-  documents: z.object({ kinds: z.record(z.string(), KindRuleSchema) }).strict(),
+  documents: z.object({
+    kinds: z.record(z.string(), KindRuleSchema),
+    displayOrder: DisplayOrderSchema.optional().default({}),
+  }).strict(),
   case: z.object({ fields: z.record(z.string(), FieldRuleSchema) }).strict(),
 }).strict();
 
 const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z.RefinementCtx): void => {
-  const reservedFields = new Set(['id', 'title', 'steps', 'source', 'status', 'details', 'procedure', 'parameters', 'location', 'snippet']);
+  const reservedFields = new Set(['id', 'title', 'steps', 'source', 'status', 'details', 'procedure', 'parameters', 'location', 'snippet', 'owner']);
   for (const name of Object.keys(rules.case.fields)) if (reservedFields.has(name)) context.addIssue({ code: 'custom', path: ['case', 'fields', name], message: `${name} is reserved by the case model` });
-  const owner = rules.case.fields.owner;
-  if (!owner || !owner.required || owner.type !== 'reference') {
-    context.addIssue({ code: 'custom', path: ['case', 'fields', 'owner'], message: 'owner must be a required reference field' });
+  const belongsTo = rules.case.fields.belongsTo;
+  if (!belongsTo || !belongsTo.required || belongsTo.type !== 'reference') {
+    context.addIssue({ code: 'custom', path: ['case', 'fields', 'belongsTo'], message: 'belongsTo must be a required reference field' });
   }
-  if (owner?.placement !== 'classification') context.addIssue({ code: 'custom', path: ['case', 'fields', 'owner', 'placement'], message: 'owner must be a classification field' });
+  if (belongsTo?.placement !== 'classification') context.addIssue({ code: 'custom', path: ['case', 'fields', 'belongsTo', 'placement'], message: 'belongsTo must be a classification field' });
   const refs = rules.case.fields.refs;
   if (refs && refs.type !== 'reference-list') context.addIssue({ code: 'custom', path: ['case', 'fields', 'refs'], message: 'refs must be a reference-list field' });
   if (refs?.placement === 'detail') context.addIssue({ code: 'custom', path: ['case', 'fields', 'refs', 'placement'], message: 'refs must be a classification field' });
@@ -85,6 +93,9 @@ const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z
     for (const targetKind of rule.parent.targetKinds) if (rules.documents.kinds[targetKind] === undefined) {
       context.addIssue({ code: 'custom', path: ['documents', 'kinds', kind, 'parent', 'targetKinds'], message: `unknown document kind ${targetKind}` });
     }
+  }
+  for (const kind of Object.keys(rules.documents.displayOrder)) if (rules.documents.kinds[kind] === undefined) {
+    context.addIssue({ code: 'custom', path: ['documents', 'displayOrder', kind], message: `unknown document kind ${kind}` });
   }
 };
 

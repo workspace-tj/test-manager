@@ -2,7 +2,7 @@ import { test } from '@playwright/test';
 
 /*
 @case
-owner: order-cancellation
+belongsTo: order-cancellation
 refs: [cancellation-eligibility]
 role: product
 impact: 3

@@ -1,0 +1,36 @@
+version: 1
+idPattern: "^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$"
+discovery:
+  documents: ["knowledge/**/*.md"]
+  manualCases: ["knowledge/**/*.manual.yaml"]
+  sources:
+    - kind: vitest
+      paths: ["src/**/*.test.ts"]
+    - kind: playwright
+      paths: ["journeys/**/*.spec.ts"]
+documents:
+  kinds:
+    domain:
+      description: 業務領域
+      parent: { required: false, targetKinds: [] }
+    feature:
+      description: domainに属する機能
+      parent: { required: true, targetKinds: [domain] }
+  displayOrder:
+    domain: [orders, billing]
+    feature: [order-cancellation, invoicing]
+case:
+  fields:
+    belongsTo:
+      type: reference
+      targetKinds: [domain, feature]
+      placement: classification
+      required: true
+    impact:
+      type: integer-enum
+      placement: classification
+      required: true
+      values:
+        1: { description: 限定的 }
+        2: { description: 主要操作 }
+        3: { description: 主要目的 }

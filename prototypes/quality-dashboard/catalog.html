@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="ja">
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>ケースを探す — Test Manager</title><link rel="stylesheet" href="assets/dashboard.css" /></head>
+<body>
+  <header class="app-header"><div class="header-inner"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">✓</span><span>Test Manager</span></a><nav class="segmented-nav" aria-label="主要ナビゲーション"><a href="index.html">日次実行</a><a href="release.html">リリース差分</a><a href="catalog.html" aria-current="page">ケース探索</a></nav><span class="prototype-chip">Prototype</span></div></header>
+  <main>
+    <div class="page-intro"><div><p class="eyebrow">登録された確認内容</p><h1>ケースを探す</h1><p>テスト手段ではなく、domainとfeatureから確認内容をたどります。</p></div></div>
+    <div class="catalog-layout"><aside class="catalog-sidebar"><p class="sidebar-label">DOMAIN</p><nav aria-label="domain"><a class="active" href="#billing"><span>billing</span><b>284</b></a><a href="#contracts"><span>contracts</span><b>198</b></a><a href="#scheduling"><span>scheduling</span><b>246</b></a><a href="#authentication"><span>authentication</span><b>96</b></a></nav></aside>
+      <section id="billing" class="catalog-content"><div class="search-bar"><span aria-hidden="true">⌕</span><input type="search" aria-label="ケースを検索" placeholder="billing内のケースを検索" /><select aria-label="状態"><option>すべての状態</option><option>active</option><option>planned</option><option>skip</option></select></div><div class="section-heading catalog-heading"><div><p class="feature-path">選択中のdomain</p><h2>billing</h2><p>4 features · domain全体 7ケース</p></div><span class="section-meta">284 cases</span></div>
+        <ul class="grouped-list feature-list"><li><div class="feature-title"><div><h3>domain全体</h3><p>featureへ限定しない不変条件・共通処理</p></div><span>7ケース</span></div><ul class="mini-cases"><li><div><strong>請求金額は常に0以上である</strong><small>CASE-0012</small></div><span>active · unit</span></li></ul></li><li><div class="feature-title"><div><h3>取消・返金</h3><p>cancellation-and-refund</p></div><span>38ケース</span></div><ul class="mini-cases"><li><div><strong>取消済み明細を請求合計から除外する</strong><small>CASE-1188</small></div><span>active · unit</span></li><li><div><strong>管理者も出荷済み注文を取り消せない</strong><small>CASE-2098</small></div><span class="text-warning">planned</span></li><li><div><strong>管理者が期限を延長できる</strong><small>CASE-2110</small></div><span>手動確認項目</span></li></ul></li><li><div class="feature-title"><div><h3>請求書作成</h3><p>invoice-creation</p></div><span>42ケース</span></div></li><li><div class="feature-title"><div><h3>税計算</h3><p>tax-calculation</p></div><span>51ケース</span></div></li></ul>
+      </section>
+    </div>
+  </main>
+  <footer class="site-footer"><p>Fixture prototype · sourceは各ケースの補助情報です。</p><a href="../../docs/quality-dashboard-design.md">設計文書</a></footer>
+</body></html>

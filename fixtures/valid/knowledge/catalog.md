@@ -1,6 +1,6 @@
 ---
 id: catalog
-kind: area
+kind: domain
 title: 商品カタログ
 refs: [orders]
 ---

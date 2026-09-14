@@ -1,0 +1,11 @@
+{
+  "state": "completed",
+  "unitId": "vitest-unit-node",
+  "observations": [
+    { "caseId": "CASE-101", "expected": "passed", "attemptCoverage": { "kind": "finalOnly", "retryCount": 0, "flaky": false }, "attempts": [{ "outcome": "passed", "durationMs": 18, "startedAt": "2026-09-13T00:00:01Z", "artifactRefs": [] }] },
+    { "caseId": "CASE-102", "expected": "passed", "attemptCoverage": { "kind": "finalOnly", "retryCount": 0, "flaky": false }, "attempts": [{ "outcome": "failed", "durationMs": 22, "startedAt": "2026-09-13T00:00:02Z", "artifactRefs": ["vitest/case-102.json"] }] },
+    { "caseId": "CASE-103", "expected": "failed", "attemptCoverage": { "kind": "finalOnly", "retryCount": 0, "flaky": false }, "attempts": [{ "outcome": "failed", "durationMs": 14, "startedAt": "2026-09-13T00:00:03Z", "artifactRefs": [] }] },
+    { "caseId": "CASE-104", "expected": "failed", "attemptCoverage": { "kind": "finalOnly", "retryCount": 0, "flaky": false }, "attempts": [{ "outcome": "passed", "durationMs": 11, "startedAt": "2026-09-13T00:00:04Z", "artifactRefs": [] }] },
+    { "caseId": "CASE-105", "expected": "skipped", "attemptCoverage": { "kind": "finalOnly", "retryCount": 0, "flaky": false }, "attempts": [{ "outcome": "skipped", "durationMs": 0, "startedAt": "2026-09-13T00:00:05Z", "artifactRefs": [] }] }
+  ]
+}

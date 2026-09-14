@@ -1,0 +1,7 @@
+id: CASE-110
+title: 締め後の請求差額を照合する
+belongsTo: invoicing
+impact: 3
+steps:
+  - action: 締め後の請求差額一覧を開く
+    expected: 原取引と調整額を照合できる

@@ -51,7 +51,10 @@ export type ProjectRules = Readonly<{
     manualCases: ReadonlyArray<string>;
     sources: ReadonlyArray<Readonly<{ kind: SourceKind; paths: ReadonlyArray<string> }>>;
   }>;
-  documents: Readonly<{ kinds: Readonly<Record<string, KindRule>> }>;
+  documents: Readonly<{
+    kinds: Readonly<Record<string, KindRule>>;
+    displayOrder: Readonly<Record<string, ReadonlyArray<string>>>;
+  }>;
   case: Readonly<{ fields: Readonly<Record<string, FieldRule>> }>;
 }>;
 
@@ -67,7 +70,7 @@ export type KnowledgeDocument = Readonly<{
 }>;
 
 export type CaseSource = 'manual' | SourceKind;
-export type CaseFields = Readonly<{ owner: DocumentId; refs?: ReadonlyArray<DocumentId>; readonly [key: string]: unknown }>;
+export type CaseFields = Readonly<{ belongsTo: DocumentId; refs?: ReadonlyArray<DocumentId>; readonly [key: string]: unknown }>;
 type CaseBase = Readonly<{
   id: CaseId;
   title: string;

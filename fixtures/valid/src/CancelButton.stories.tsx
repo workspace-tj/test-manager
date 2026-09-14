@@ -1,6 +1,6 @@
 /*
 @case
-owner: order-cancellation
+belongsTo: order-cancellation
 role: product
 impact: 2
 */
