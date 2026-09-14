@@ -202,6 +202,8 @@ describe('project catalog', () => {
     expect(first.get('index.html')).toContain('class="segmented-nav"');
     expect(first.get('index.html')).toContain('aria-current="page">ドメイン</a>');
     expect(first.get('index.html')).toContain('class="domain-overviews"');
+    expect(first.get('index.html')?.indexOf('id="search"')).toBeLessThan(first.get('index.html')?.indexOf('class="domain-overviews"') ?? 0);
+    expect(first.get('index.html')).toContain('data-domain-overview="orders"');
     expect(first.get('index.html')).toContain('商品カタログ');
     expect(first.get('index.html')).not.toContain('domainとfeatureから');
     expect(first.get('index.html')).not.toContain('IDや語句が分かっているとき');
@@ -267,6 +269,10 @@ describe('project catalog', () => {
     const search = control();
     const source = control('source');
     const role = control('role');
+    const overviews = [
+      { hidden: false, dataset: { domainOverview: 'orders', search: '受注 注文取消 cancellation case-1 product' } },
+      { hidden: false, dataset: { domainOverview: 'catalog', search: '商品カタログ calculation case-2 engineering' } },
+    ];
     const rows = [
       { hidden: false, dataset: { domain: 'orders', search: 'case-1 cancellation product', filters: JSON.stringify({ source: 'vitest', role: 'product' }) } },
       { hidden: false, dataset: { domain: 'catalog', search: 'case-2 calculation engineering', filters: JSON.stringify({ source: 'playwright', role: 'engineering' }) } },
@@ -282,12 +288,13 @@ describe('project catalog', () => {
     const empty = { hidden: true };
     const document = {
       querySelector: (selector: string) => selector === '#search' ? search : selector === '#result-summary' ? summary : selector === '#empty-results' ? empty : undefined,
-      querySelectorAll: (selector: string) => selector === '[data-filter-key]' ? [source, role] : selector === '[data-case-row]' ? rows : selector === '[data-domain-group]' ? groups : [allDomains, orders],
+      querySelectorAll: (selector: string) => selector === '[data-filter-key]' ? [source, role] : selector === '[data-domain-overview]' ? overviews : selector === '[data-case-row]' ? rows : selector === '[data-domain-group]' ? groups : [allDomains, orders],
     };
     runInNewContext(files.get('assets/search.js') ?? '', { document, JSON, String });
     search.value = 'PRODUCT case-1'; source.value = 'vitest'; role.value = 'product';
     listeners.get(role)?.change?.();
     expect(rows.map((row) => row.hidden)).toEqual([false, true]);
+    expect(overviews.map((overview) => overview.hidden)).toEqual([false, true]);
     search.value = 'calculation case-2'; source.value = ''; role.value = '';
     listeners.get(search)?.input?.();
     expect(rows.map((row) => row.hidden)).toEqual([true, false]);
