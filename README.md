@@ -1,10 +1,10 @@
 # test-manager
 
-テストコード、手動テスト、知識文書を、実行せずに一つのカタログへまとめる CLI です。
+テストコード、手動テスト、仕様・判断文書を、実行せずに一つのカタログへまとめる CLI です。
 
-プロジェクト内に散らばった Vitest、Playwright、Storybook、手動ケースを静的解析し、「このテストはどの仕様に属するか」「参照先が消えていないか」「必要な分類が記録されているか」を検査します。検査済みの情報から、検索・絞り込み可能な静的サイトも生成できます。
+プロジェクト内に散らばった Vitest、Playwright、Storybook、手動ケースを静的解析し、「このテストはどの仕様に属するか」「参照先が消えていないか」「必要な分類が記録されているか」を検査します。検査済みの情報から、domainを入口にたどり、複数語検索や分類で絞り込める静的サイトも生成できます。
 
-![生成されたテスト知識カタログの一覧画面](docs/assets/test-knowledge-catalog.png)
+![生成されたテストカタログの一覧画面](docs/assets/test-knowledge-catalog.png)
 
 test-manager はテストランナーそのものではありません。runner reporterが出力した事実をCI manifestと統合し、テスト定義と実行結果を日次・リリース差分画面へ接続します。
 
@@ -28,10 +28,10 @@ CI開始前に確定したmanifestと、Vitest・Playwright reporterが生成し
 
 たとえば、ある仕様に対して単体テスト、E2E、Storybook、手動確認が存在するとします。それぞれへ同じ `belongsTo` と固有のケース ID を付けると、test-manager は次を行います。
 
-1. 設定した glob から知識文書とテスト定義を探す
+1. 設定した glob から仕様・判断文書とテスト定義を探す
 2. ソースコードを実行せず、対応する宣言だけを AST で読み取る
 3. ID の重複、参照切れ、親子関係、必須項目、分類語彙を検査する
-4. 知識文書と全テストケースを横断できる静的サイトと `catalog.json` を生成する
+4. 仕様・判断文書と全テストケースを横断できる静的サイトと `catalog.json` を生成する
 
 CI では `check` を実行して、不整合のある変更を検出できます。人が仕様やテストを調べるときは、`build` したサイトから、領域・情報源・状態・プロジェクト独自の分類でケースを探せます。
 
@@ -112,13 +112,14 @@ case:
       required: false
       uniqueItems: true
     impact:
+      label: 影響度
       type: integer-enum
       placement: classification
       required: true
       values:
-        1: { description: 影響が限定的 }
-        2: { description: 主要操作に影響する }
-        3: { description: 主要な利用目的を阻害する }
+        1: { label: 限定的, description: 影響が限定的 }
+        2: { label: 主要操作, description: 主要操作に影響する }
+        3: { label: 主要業務, description: 主要な利用目的を阻害する }
     reason:
       type: text
       placement: detail
@@ -137,7 +138,7 @@ case:
 
 ### documents.kinds
 
-知識文書の種類と、許可する親子関係を定義します。`parent.required` で親の必須性を、`targetKinds` で親として許可する種類を指定します。
+仕様・判断文書の種類と、許可する親子関係を定義します。`parent.required` で親の必須性を、`targetKinds` で親として許可する種類を指定します。
 
 `documents.displayOrder` には、kindごとの安定した表示順を指定できます。実行結果によって順序は変わらず、一覧上の位置を保ちます。列挙していない文書は、指定済み文書の後ろへID順で表示します。存在しないID、kindが異なるID、重複したIDは設定エラーです。
 
@@ -145,7 +146,7 @@ case:
 
 プロジェクトで各ケースに記録する項目を定義します。フィールド名は固定されていませんが、`belongsTo` は必須の参照項目です。
 
-利用できる型は `reference`、`reference-list`、`enum`、`integer-enum`、`text`、`text-list` です。`required`、条件付き必須の `requiredWhen`、`minItems`、`uniqueItems` も設定できます。
+利用できる型は `reference`、`reference-list`、`enum`、`integer-enum`、`text`、`text-list` です。`required`、条件付き必須の `requiredWhen`、`minItems`、`uniqueItems` も設定できます。安定した英語のfield keyやenum valueを変えずに、任意の`label`で画面上の日本語表示名を指定できます。
 
 `placement` は記述場所とサイト上での扱いを決めます。
 
@@ -154,9 +155,9 @@ case:
 
 設定に未知のキー、矛盾した必須条件、存在しない文書 kind への参照がある場合は、起動時に拒否します。
 
-## 知識とケースを記述する
+## 仕様・判断とケースを記述する
 
-### 知識文書
+### 仕様・判断文書
 
 Markdown 先頭の YAML frontmatter に、ID、種類、タイトル、任意の親と関連文書を記述します。
 

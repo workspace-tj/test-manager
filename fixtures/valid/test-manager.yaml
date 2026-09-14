@@ -29,19 +29,21 @@ case:
     belongsTo: { required: true, placement: classification, type: reference, targetKinds: [domain, feature] }
     refs: { required: false, placement: classification, type: reference-list, minItems: 1, uniqueItems: true, targetKinds: [domain, feature, decision] }
     role:
+      label: 確認担当
       required: true
       placement: classification
       type: enum
       values:
-        product: { description: プロダクトの振る舞い }
-        engineering: { description: 技術的な契約 }
+        product: { label: プロダクト, description: プロダクトの振る舞い }
+        engineering: { label: エンジニアリング, description: 技術的な契約 }
     impact:
+      label: 影響度
       required: true
       placement: classification
       type: integer-enum
       values:
-        1: { description: 限定的な不便 }
-        2: { description: 主要操作に支障 }
-        3: { description: 主要業務が成立しない }
+        1: { label: 限定的, description: 限定的な不便 }
+        2: { label: 主要操作, description: 主要操作に支障 }
+        3: { label: 主要業務, description: 主要業務が成立しない }
     conditions: { required: false, placement: detail, type: text-list, minItems: 1 }
     reason: { required: false, placement: detail, type: text }

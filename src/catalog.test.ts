@@ -196,11 +196,34 @@ describe('project catalog', () => {
     expect(first.get('index.html')).toContain('id="status-filter"');
     expect(first.get('index.html')).toContain('id="role-filter"');
     expect(first.get('index.html')).toContain('id="impact-filter"');
+    expect(first.get('index.html')).toContain('class="catalog-layout"');
+    expect(first.get('index.html')).toContain('class="app-header"');
+    expect(first.get('index.html')).toContain('class="brand-mark"');
+    expect(first.get('index.html')).toContain('class="segmented-nav"');
+    expect(first.get('index.html')).toContain('aria-current="page">ドメイン</a>');
+    expect(first.get('index.html')).toContain('class="domain-overviews"');
+    expect(first.get('index.html')).toContain('商品カタログ');
+    expect(first.get('index.html')).not.toContain('domainとfeatureから');
+    expect(first.get('index.html')).not.toContain('IDや語句が分かっているとき');
+    expect(first.get('index.html')).not.toContain('配下の文書はありません');
+    expect(first.get('index.html')).toContain('>確認担当<');
+    expect(first.get('index.html')).toContain('>プロダクト<');
+    expect(first.has('cases/index.html')).toBe(false);
+    expect(first.get('index.html')).toContain('data-domain-filter="orders"');
+    expect(first.get('index.html')).toContain('data-domain-group="orders"');
+    expect(first.get('index.html')).toContain('注文取消');
     expect(first.get('cases/CASE-301.html')).toContain('<code>CASE-301</code>');
     expect(first.get('cases/CASE-301.html')).toContain('<h1>出荷済み注文では取消ボタンを無効表示する</h1>');
+    expect(first.get('cases/CASE-301.html')).toContain('<h2>関連する仕様・判断</h2>');
     expect(first.get('documents/cancellation-eligibility.html')).toContain('判断の理由');
     expect(first.get('documents/cancellation-eligibility.html')).toContain('&lt;script&gt;');
     expect(first.get('documents/cancellation-eligibility.html')).not.toContain("<script>alert('not executed')</script>");
+    expect(first.get('documents/orders.html')).toContain('CASE-001.html');
+    expect(first.get('documents/orders.html')).toContain('>配下の文書<');
+    expect(first.get('documents/orders.html')).toContain('order-cancellation.html');
+    expect(first.get('documents/index.html')).toContain('class="document-tree"');
+    expect(first.get('documents/index.html')).toContain('<h1>仕様・判断</h1>');
+    expect(first.get('index.html')).not.toContain('知識');
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-build-'));
     const out = path.join(root, 'site');
     await writeSite(result.catalog, out);
@@ -245,17 +268,34 @@ describe('project catalog', () => {
     const source = control('source');
     const role = control('role');
     const rows = [
-      { hidden: false, dataset: { search: 'case-1 cancellation product', filters: JSON.stringify({ source: 'vitest', role: 'product' }) } },
-      { hidden: false, dataset: { search: 'case-2 calculation engineering', filters: JSON.stringify({ source: 'playwright', role: 'engineering' }) } },
+      { hidden: false, dataset: { domain: 'orders', search: 'case-1 cancellation product', filters: JSON.stringify({ source: 'vitest', role: 'product' }) } },
+      { hidden: false, dataset: { domain: 'catalog', search: 'case-2 calculation engineering', filters: JSON.stringify({ source: 'playwright', role: 'engineering' }) } },
     ];
-    const document = { querySelector: (selector: string) => selector === '#search' ? search : undefined, querySelectorAll: (selector: string) => selector === '[data-filter-key]' ? [source, role] : rows };
+    const groups = [{ hidden: false, dataset: { domainGroup: 'orders' } }, { hidden: false, dataset: { domainGroup: 'catalog' } }];
+    const domainControl = (domain: string) => ({
+      dataset: { domainFilter: domain }, classList: { toggle() {} }, setAttribute() {},
+      addEventListener(event: string, listener: () => void) { const own = listeners.get(this) ?? {}; own[event] = listener; listeners.set(this, own); },
+    });
+    const allDomains = domainControl('');
+    const orders = domainControl('orders');
+    const summary = { textContent: '' };
+    const empty = { hidden: true };
+    const document = {
+      querySelector: (selector: string) => selector === '#search' ? search : selector === '#result-summary' ? summary : selector === '#empty-results' ? empty : undefined,
+      querySelectorAll: (selector: string) => selector === '[data-filter-key]' ? [source, role] : selector === '[data-case-row]' ? rows : selector === '[data-domain-group]' ? groups : [allDomains, orders],
+    };
     runInNewContext(files.get('assets/search.js') ?? '', { document, JSON, String });
-    search.value = 'case'; source.value = 'vitest'; role.value = 'product';
+    search.value = 'PRODUCT case-1'; source.value = 'vitest'; role.value = 'product';
     listeners.get(role)?.change?.();
     expect(rows.map((row) => row.hidden)).toEqual([false, true]);
-    search.value = 'calculation'; source.value = ''; role.value = '';
+    search.value = 'calculation case-2'; source.value = ''; role.value = '';
     listeners.get(search)?.input?.();
     expect(rows.map((row) => row.hidden)).toEqual([true, false]);
+    search.value = '';
+    listeners.get(orders)?.click?.();
+    expect(rows.map((row) => row.hidden)).toEqual([false, true]);
+    expect(groups.map((group) => group.hidden)).toEqual([false, true]);
+    expect(summary.textContent).toBe('1ケース');
   });
 
   it('refuses unsafe output targets and directories without its exact marker', async () => {

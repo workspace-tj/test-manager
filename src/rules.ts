@@ -11,12 +11,13 @@ const KindRuleSchema = z.object({
 }).strict();
 
 const RequirednessShape = {
+  label: z.string().min(1).optional(),
   required: z.boolean(),
   placement: z.enum(['classification', 'detail']),
   requiredWhen: z.object({ field: z.string().min(1), equals: z.union([z.string(), z.number().int()]) }).strict().optional(),
 } as const;
 
-const ValuesSchema = z.record(z.string(), z.object({ description: z.string().min(1) }).strict())
+const ValuesSchema = z.record(z.string(), z.object({ label: z.string().min(1).optional(), description: z.string().min(1) }).strict())
   .refine((values) => Object.keys(values).length > 0, 'values must not be empty');
 
 const DisplayOrderSchema = z.record(
@@ -101,17 +102,27 @@ const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z
 
 const RulesSchema = RulesShape.superRefine(validateRuleRelationships);
 
+const normalizeEnumValues = (
+  values: Readonly<Record<string, Readonly<{ label?: string | undefined; description: string }>>>,
+): Readonly<Record<string, Readonly<{ label?: string; description: string }>>> => Object.fromEntries(
+  Object.entries(values).map(([key, value]) => [key, {
+    description: value.description,
+    ...(value.label === undefined ? {} : { label: value.label }),
+  }]),
+);
+
 const normalizeFieldRule = (field: z.infer<typeof FieldRuleSchema>): FieldRule => {
   const requiredness = field.required
     ? { required: true } as const
     : { required: false, ...(field.requiredWhen ? { requiredWhen: field.requiredWhen } : {}) } as const;
+  const presentation = field.label === undefined ? {} : { label: field.label };
   switch (field.type) {
-    case 'reference': return { ...requiredness, placement: field.placement, type: field.type, targetKinds: field.targetKinds };
-    case 'reference-list': return { ...requiredness, placement: field.placement, type: field.type, targetKinds: field.targetKinds, ...(field.minItems !== undefined ? { minItems: field.minItems } : {}), ...(field.uniqueItems !== undefined ? { uniqueItems: field.uniqueItems } : {}) };
-    case 'enum': return { ...requiredness, placement: field.placement, type: field.type, values: field.values };
-    case 'integer-enum': return { ...requiredness, placement: field.placement, type: field.type, values: field.values };
-    case 'text': return { ...requiredness, placement: field.placement, type: field.type };
-    case 'text-list': return { ...requiredness, placement: field.placement, type: field.type, ...(field.minItems !== undefined ? { minItems: field.minItems } : {}), ...(field.uniqueItems !== undefined ? { uniqueItems: field.uniqueItems } : {}) };
+    case 'reference': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, targetKinds: field.targetKinds };
+    case 'reference-list': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, targetKinds: field.targetKinds, ...(field.minItems !== undefined ? { minItems: field.minItems } : {}), ...(field.uniqueItems !== undefined ? { uniqueItems: field.uniqueItems } : {}) };
+    case 'enum': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, values: normalizeEnumValues(field.values) };
+    case 'integer-enum': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, values: normalizeEnumValues(field.values) };
+    case 'text': return { ...requiredness, ...presentation, placement: field.placement, type: field.type };
+    case 'text-list': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, ...(field.minItems !== undefined ? { minItems: field.minItems } : {}), ...(field.uniqueItems !== undefined ? { uniqueItems: field.uniqueItems } : {}) };
   }
 };
 
