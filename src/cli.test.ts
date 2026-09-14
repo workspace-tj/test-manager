@@ -48,7 +48,7 @@ describe('CLI process boundary', () => {
     const result = await run(['build', '--config', 'fixtures/valid/test-manager.yaml', '--out', out]);
     expect(result.code).toBe(0);
     expect(await readFile(path.join(out, '.test-manager-output'), 'utf8')).toBe('v1\n');
-    expect(await readFile(path.join(out, 'index.html'), 'utf8')).toContain('テスト知識カタログ');
+    expect(await readFile(path.join(out, 'index.html'), 'utf8')).toContain('ドメインから確認内容をたどる');
   });
 
   it('reads current and previous TestRuns and generates the daily HTML and CSS', async () => {

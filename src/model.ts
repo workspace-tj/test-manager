@@ -32,7 +32,7 @@ export type FieldRule = FieldRequiredness & Readonly<
   }
   | {
     type: 'enum' | 'integer-enum';
-    values: Readonly<Record<string, Readonly<{ description: string }>>>;
+    values: Readonly<Record<string, Readonly<{ label?: string; description: string }>>>;
   }
   | { type: 'text' }
   | {
@@ -40,7 +40,7 @@ export type FieldRule = FieldRequiredness & Readonly<
     minItems?: number | undefined;
     uniqueItems?: boolean | undefined;
   }
-> & Readonly<{ placement: 'classification' | 'detail' }>;
+> & Readonly<{ label?: string; placement: 'classification' | 'detail' }>;
 
 export type SourceKind = 'vitest' | 'playwright' | 'storybook';
 export type ProjectRules = Readonly<{

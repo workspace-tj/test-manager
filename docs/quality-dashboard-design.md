@@ -90,7 +90,7 @@ Daily Scrumで修正・再実行・Issue化を決める
 
 Test Manager coreは、未確認・調査中・修正中などの作業状態やassigneeを管理しません。
 
-## ケースの知識モデル
+## ケースと仕様のモデル
 
 ### ケースは確認すべき振る舞いの最小単位
 
@@ -118,7 +118,7 @@ belongsTo: cancellation-and-refund
 belongsTo: billing
 ```
 
-domainとfeatureは既存の知識文書として登録します。
+domainとfeatureは既存の仕様・判断文書として登録します。
 
 ```md
 ---

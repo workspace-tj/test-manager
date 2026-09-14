@@ -18,6 +18,14 @@ describe('project-defined vocabulary', () => {
     expect(Object.keys(impact?.type === 'integer-enum' ? impact.values : {})).toEqual(['10', '20']);
   });
 
+  it('accepts optional display labels without changing stable field keys and values', async () => {
+    const result = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
+    expect(result.diagnostics).toEqual([]);
+    const role = result.rules?.case.fields.role;
+    expect(role?.label).toBe('確認担当');
+    expect(role?.type === 'enum' && role.values.product).toEqual({ label: 'プロダクト', description: 'プロダクトの振る舞い' });
+  });
+
   it('rejects unknown config keys', async () => {
     const result = await loadRules(path.resolve('fixtures/invalid/test-manager.yaml'));
     expect(result.rules).toBeUndefined();
