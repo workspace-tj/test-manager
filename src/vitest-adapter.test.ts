@@ -1,7 +1,12 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { TestManagerVitestReporter, toVitestUnit } from './vitest-adapter.js';
+
+beforeAll(async () => {
+  await mkdir('/tmp/test-manager-artifacts/screenshots', { recursive: true });
+  await writeFile('/tmp/test-manager-artifacts/screenshots/failure.png', 'image', 'utf8');
+});
 
 describe('Vitest result adapter', () => {
   it('converts public Vitest result data without inventing retry attempts', () => {

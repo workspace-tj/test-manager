@@ -12,6 +12,7 @@ const run = (
   observations: ReadonlyArray<Readonly<{ caseId: string; outcome: 'passed' | 'failed' }>>,
   incomplete: ReadonlyArray<string> = [],
   environment = 'dev',
+  completedAt = '2026-09-13T00:01:00Z',
 ): TestRun => {
   const parsed = parseTestRun({
     schemaVersion: 1,
@@ -21,7 +22,7 @@ const run = (
     commit: runId === 'current' ? '7f3a12c' : '6e2b11a',
     scopeId: 'daily-all',
     startedAt: '2026-09-13T00:00:00Z',
-    completedAt: '2026-09-13T00:01:00Z',
+    completedAt,
     ciUrl: `https://example.com/${runId}`,
     units: [
       {
@@ -69,6 +70,32 @@ describe('daily view', () => {
     expect(result.ok && result.view.comparison).toEqual({ state: 'unavailable', reason: 'differentEnvironment' });
   });
 
+  it('does not compare a previous run completed after the current run', async () => {
+    const catalog = await checkProject(path.resolve('fixtures/valid/test-manager.yaml'));
+    if (!catalog.ok) throw new Error('fixture must be valid');
+    const current = run('current', [{ caseId: 'CASE-001', outcome: 'failed' }]);
+    const previous = run('previous', [{ caseId: 'CASE-001', outcome: 'passed' }], [], 'dev', '2026-09-13T00:02:00Z');
+
+    const result = buildDailyView(catalog.catalog, current, previous);
+
+    expect(result.ok && result.view.comparison).toEqual({ state: 'unavailable', reason: 'previousIsNewer' });
+    expect(result.ok && result.view.changes).toEqual([]);
+  });
+
+  it('compares a historical result after the case runner changes', async () => {
+    const catalog = await checkProject(path.resolve('fixtures/valid/test-manager.yaml'));
+    if (!catalog.ok) throw new Error('fixture must be valid');
+    const current = run('current', [{ caseId: 'CASE-001', outcome: 'failed' }]);
+    const previous = run('previous', [{ caseId: 'CASE-001', outcome: 'passed' }]);
+    const historical = { ...previous, units: previous.units.map((unit) => ({ ...unit, runner: 'playwright' as const })) };
+
+    const result = buildDailyView(catalog.catalog, current, historical);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.view.changes.map((change) => [change.caseId, change.kind])).toEqual([['CASE-001', 'newFailure']]);
+  });
+
   it('rejects run cases that do not exist in the catalog', async () => {
     const catalog = await checkProject(path.resolve('fixtures/valid/test-manager.yaml'));
     if (!catalog.ok) throw new Error('fixture must be valid');
@@ -84,6 +111,28 @@ describe('daily view', () => {
       ok: false,
       problems: [{ kind: 'runnerMismatch', caseId: 'CASE-001', runner: 'playwright', source: 'vitest' }],
     });
+  });
+
+  it('derives root domain rows when cases may belong only to features', async () => {
+    const checked = await checkProject(path.resolve('fixtures/valid/test-manager.yaml'));
+    if (!checked.ok) throw new Error('fixture must be valid');
+    const belongsTo = checked.catalog.rules.case.fields.belongsTo;
+    if (belongsTo?.type !== 'reference') throw new Error('fixture must use a belongsTo reference');
+    const catalog = {
+      ...checked.catalog,
+      cases: checked.catalog.cases.filter((managedCase) => managedCase.id === 'CASE-001'),
+      rules: {
+        ...checked.catalog.rules,
+        case: { fields: { ...checked.catalog.rules.case.fields, belongsTo: { ...belongsTo, targetKinds: ['feature'] } } },
+      },
+    };
+
+    const result = buildDailyView(catalog, run('current', [{ caseId: 'CASE-001', outcome: 'passed' }]));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.view.domains.map((domain) => domain.id)).toEqual(['orders']);
+    expect(result.view.domains[0]).toMatchObject({ planned: 1, passed: 1 });
   });
 
   it('does not call a failure new when there is no comparable previous observation', async () => {

@@ -1,12 +1,6 @@
 import { z } from 'zod';
 import { caseIdSchema } from './ids.js';
-
-const RunIdSchema = z.string().min(1).brand<'RunId'>();
-const IdentifierSchema = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,127})$/u);
-export const ScopeIdSchema = IdentifierSchema.brand<'ScopeId'>();
-export const EnvironmentSchema = IdentifierSchema.brand<'TestEnvironment'>();
-const CommitSchema = z.string().regex(/^[0-9a-f]{7,64}$/u).brand<'CommitSha'>();
-export const TimestampSchema = z.iso.datetime({ offset: true });
+import { CommitSchema, EnvironmentSchema, RunIdSchema, ScopeIdSchema, TimestampSchema } from './run-identity.js';
 
 const AttemptSchema = z.strictObject({
   outcome: z.enum(['passed', 'failed', 'timedOut', 'skipped', 'interrupted']),
@@ -87,6 +81,9 @@ export const testRunSchema = (idPattern: RegExp) => z.strictObject({
   ciUrl: z.url({ protocol: /^https?$/u }),
   units: z.array(testRunUnitSchema(idPattern)).min(1),
 }).superRefine((run, context) => {
+  if (Date.parse(run.completedAt) < Date.parse(run.startedAt)) {
+    context.addIssue({ code: 'custom', path: ['completedAt'], message: 'completedAt must not precede startedAt' });
+  }
   const unitIds = run.units.map((unit) => unit.unitId);
   if (new Set(unitIds).size !== unitIds.length) context.addIssue({ code: 'custom', path: ['units'], message: 'unitId must be unique within a run' });
   const plannedCaseIds = run.units.flatMap((unit) => unit.plannedCaseIds);

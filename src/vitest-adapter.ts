@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import { relativeExistingContainedPath } from './contained-path.js';
 import type { Reporter, SerializedError, TestCase, TestModule, TestRunEndReason } from 'vitest/node';
 import { testRunUnitSchema } from './test-run.js';
 
@@ -62,19 +63,13 @@ const metadataSchema = z.looseObject({ caseId: z.string().min(1) });
 const hasSyntaxError = (errors: ReadonlyArray<Readonly<Record<string, unknown>>> | undefined): boolean =>
   errors?.some((error) => error.__vitest_test_syntax_error__ === true || error.name === 'TestSyntaxError') ?? false;
 
-const isWithin = (root: string, candidate: string): boolean => {
-  const relative = path.relative(root, candidate);
-  return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
-};
-
 const artifactRefs = (testCase: VitestCaseSource, artifactRoot: string): ReadonlyArray<string> => testCase.artifacts()
   .flatMap((artifact) => artifact.attachments ?? [])
   .flatMap((attachment) => {
     if (attachment.path === undefined) return [];
-    const absoluteRoot = path.resolve(artifactRoot);
-    const absoluteAttachment = path.resolve(attachment.path);
-    if (!isWithin(absoluteRoot, absoluteAttachment)) throw new Error(`Vitest attachment is outside artifactRoot: ${attachment.path}`);
-    return [path.relative(absoluteRoot, absoluteAttachment).split(path.sep).join('/')];
+    const relative = relativeExistingContainedPath(artifactRoot, attachment.path);
+    if (!relative) throw new Error(`Vitest attachment is outside artifactRoot: ${attachment.path}`);
+    return [relative];
   });
 
 const pendingCase = (testCase: VitestCaseSource, artifactRoot: string): unknown => ({

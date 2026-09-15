@@ -5,10 +5,10 @@
   "packageManager": "pnpm@12.4.1",
   "type": "module",
   "bin": {
-    "test-manager": "dist/cli.js"
+    "test-manager": "dist/cli-entry.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm build && vitest run",
     "test:watch": "vitest"

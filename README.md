@@ -43,26 +43,38 @@ CI では `check` を実行して、不整合のある変更を検出できま�
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
 pnpm build
 
-node dist/cli.js check --config fixtures/valid/test-manager.yaml
-node dist/cli.js build \
+node dist/cli-entry.js check --config fixtures/valid/test-manager.yaml
+node dist/cli-entry.js build \
   --config fixtures/valid/test-manager.yaml \
   --out /tmp/test-manager-site
 
-node dist/cli.js daily \
+node dist/cli-entry.js daily \
   --config fixtures/quality-dashboard/test-manager.yaml \
   --manifest fixtures/quality-dashboard/manifest.json \
   --completed-at 2026-09-13T00:01:00Z \
   --unit-artifact fixtures/quality-dashboard/vitest.test-manager-unit.json \
   --unit-artifact fixtures/quality-dashboard/playwright.test-manager-unit.json \
-  --stylesheet prototypes/quality-dashboard/assets/dashboard.css \
   --out /tmp/test-manager-daily
+
+node dist/cli-entry.js dashboard \
+  --config fixtures/quality-dashboard/test-manager.yaml \
+  --current-run /path/to/current-run.json \
+  --previous-run /path/to/previous-run.json \
+  --production-snapshot /path/to/production/release-catalog.json \
+  --staging-snapshot /path/to/staging/release-catalog.json \
+  --out /tmp/test-manager-dashboard
 ```
 
-`check` は検査成功時に `0`、診断がある場合に `1`、CLI の使い方が不正な場合に `2` を返します。`build`、`daily`、`snapshot`、`release` は入力検査成功後だけ、test-manager所有マーカーを持つ安全な出力ディレクトリへ生成します。
+`check` は検査成功時に `0`、診断がある場合に `1`、CLI の使い方が不正な場合に `2` を返します。`build`、`daily`、`snapshot`、`release`、`dashboard` は入力検査成功後だけ、test-manager所有マーカーを持つ安全な出力ディレクトリへ生成します。
 
-リリース差分では、productionとstagingの各checkoutで `snapshot --config <path> --commit <sha> --out <path>` を実行します。その `release-catalog.json` 2件を `release --production-snapshot <path> --staging-snapshot <path> --stylesheet <path> --out <path>` へ渡します。stagingの実行事実も表示する場合は、同じcommit・`staging`環境のrunを `--latest-staging-run` で指定します。
+`dashboard` は日次、リリース差分、カタログを一つのリンク切れがない静的サイトとして生成します。`--current-run` は日次表示だけに使用します。リリース差分へ最新のstaging結果を添える場合は、別途 `--latest-staging-run <path>` を指定します。表示するカタログと比較先の意味が食い違わないよう、現在のconfigから得たcatalogとstaging snapshotが一致しない場合は生成を拒否します。
+
+日次・リリース差分・統合dashboardの標準スタイルはtest-manager自身が同梱します。見た目を置き換える必要がある場合だけ `--stylesheet <path>` を指定します。
+
+リリース差分では、productionとstagingの各checkoutで `snapshot --config <path> --commit <sha> --out <path>` を実行します。その `release-catalog.json` 2件を `release --production-snapshot <path> --staging-snapshot <path> --out <path>` へ渡します。stagingの実行事実も表示する場合は、同じcommit・`staging`環境のrunを `--latest-staging-run` で指定します。
 
 manifestにはrun ID、attempt、environment、commit、scope、開始時刻、HTTP(S)のCI URL、実行予定unitとcase IDだけを記録します。GitHub Actions context全体や機密情報は保存しません。unit artifactが生成されなかった場合は`artifactMissing`、runnerが結果を残して途中終了した場合は`runnerError`などのincomplete理由として扱い、両者を混同しません。attachmentは設定したartifact root内だけを許可し、相対参照として保存します。
 
@@ -269,7 +281,7 @@ steps:
 依存関係のインストールとビルド後に `check` を実行します。
 
 ```sh
-node dist/cli.js check --config ./test-manager.yaml
+node dist/cli-entry.js check --config ./test-manager.yaml
 ```
 
 診断はファイル、行、列、診断コード、対象、理由を含みます。たとえば、ケースの belongsTo が存在しない、ID が重複している、必須項目が欠けている、といった変更をマージ前に検出できます。
