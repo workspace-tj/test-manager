@@ -1,14 +1,55 @@
-import { cp, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import { checkProject } from './catalog.js';
 import { renderSite, writeSite } from './site.js';
 
 const fixture = path.resolve('fixtures/valid');
+const executeFile = promisify(execFile);
 
 describe('project catalog', () => {
+  it('runs the built CLI from a consumer directory without resolving consumer dependencies', async () => {
+    const consumer = await mkdtemp(path.join(tmpdir(), 'test-manager-consumer-'));
+    const incompatibleZod = path.join(consumer, 'node_modules/zod');
+    await mkdir(incompatibleZod, { recursive: true });
+    await writeFile(
+      path.join(incompatibleZod, 'package.json'),
+      `${JSON.stringify({ name: 'zod', version: '0.0.0', type: 'module', exports: { '.': './index.js' } })}\n`,
+      'utf8',
+    );
+    await writeFile(path.join(incompatibleZod, 'index.js'), 'export {};\n', 'utf8');
+    try {
+      const output = path.join(consumer, 'site');
+      await executeFile(process.execPath, [path.resolve('dist/cli.js'), 'build', '--config', path.join(fixture, 'test-manager.yaml'), '--out', output], { cwd: consumer });
+      expect(await readdir(consumer)).toEqual(['node_modules', 'site']);
+      expect(await readdir(output)).toContain('index.html');
+    } finally {
+      await rm(consumer, { recursive: true, force: true });
+    }
+  });
+
+  it('renders without spawning a child process or creating framework temporary output', async () => {
+    const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const workingDirectory = process.cwd();
+    const before = new Set((await readdir(tmpdir())).filter((name) => name.startsWith('test-manager-astro-')));
+    const previousNodeOptions = process.env.NODE_OPTIONS;
+    try {
+      process.env.NODE_OPTIONS = '--test-manager-invalid-option';
+      expect((await renderSite(result.catalog)).has('index.html')).toBe(true);
+    } finally {
+      if (previousNodeOptions === undefined) delete process.env.NODE_OPTIONS;
+      else process.env.NODE_OPTIONS = previousNodeOptions;
+    }
+    expect(process.cwd()).toBe(workingDirectory);
+    expect(new Set((await readdir(tmpdir())).filter((name) => name.startsWith('test-manager-astro-')))).toEqual(before);
+  });
+
   it('loads documents, a one-file manual case, Vitest, Playwright, and Storybook without executing source', async () => {
     const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
     expect(result.ok).toBe(true);

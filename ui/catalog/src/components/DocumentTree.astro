@@ -1,8 +1,0 @@
----
-import type { KnowledgeDocument } from '../../../../src/model.ts';
-import { documents, safeName } from '../lib/catalog.ts';
-
-const { parent } = Astro.props as { parent?: string };
-const children = documents.filter((document) => document.parent === parent);
----
-{children.length > 0 && <ul>{children.map((document: KnowledgeDocument) => <li><div><a href={`../documents/${safeName(document.id)}.html`}>{document.title}</a></div><Astro.self parent={document.id} /></li>)}</ul>}
