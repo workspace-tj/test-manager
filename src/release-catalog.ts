@@ -30,6 +30,28 @@ const snapshotShape = z.strictObject({
 export type ReleaseCatalogSnapshot = z.infer<typeof snapshotShape>;
 export type ReleaseCatalogCase = ReleaseCatalogSnapshot['cases'][number];
 
+const canonicalize = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (typeof value !== 'object' || value === null) return value;
+  return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => [key, canonicalize(item)]));
+};
+
+export const sameReleaseCatalogContent = (
+  left: ReleaseCatalogSnapshot,
+  right: ReleaseCatalogSnapshot,
+): boolean => JSON.stringify(canonicalize({
+  schemaVersion: left.schemaVersion,
+  idPattern: left.idPattern,
+  documents: left.documents.toSorted((a, b) => a.id.localeCompare(b.id)),
+  cases: left.cases.toSorted((a, b) => a.id.localeCompare(b.id)),
+})) === JSON.stringify(canonicalize({
+  schemaVersion: right.schemaVersion,
+  idPattern: right.idPattern,
+  documents: right.documents.toSorted((a, b) => a.id.localeCompare(b.id)),
+  cases: right.cases.toSorted((a, b) => a.id.localeCompare(b.id)),
+}));
+
 const semanticCase = (managedCase: ManagedCase): ReleaseCatalogCase => {
   const { refs, ...fieldsWithoutRefs } = managedCase.fields;
   const base = {

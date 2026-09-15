@@ -100,6 +100,18 @@ describe('normalized test run', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects a run completed before it started', () => {
+    const result = parseTestRun({
+      ...input,
+      startedAt: '2026-09-13T00:02:00Z',
+      completedAt: '2026-09-13T00:01:00Z',
+    }, /^(?:CASE-[0-9]{3})$/u);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues.some((issue) => issue.path.join('.') === 'completedAt')).toBe(true);
+  });
+
   it('requires incomplete units to retain their planned cases', () => {
     const result = parseTestRun({
       ...input,

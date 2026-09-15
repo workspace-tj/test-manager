@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { checkProject } from './catalog.js';
-import { createReleaseCatalogSnapshot, parseReleaseCatalogSnapshot } from './release-catalog.js';
+import { createReleaseCatalogSnapshot, parseReleaseCatalogSnapshot, sameReleaseCatalogContent } from './release-catalog.js';
 import { parseTestRun } from './test-run.js';
 import { buildReleaseDiff } from './release-diff.js';
 
@@ -52,6 +52,23 @@ describe('release catalog difference', () => {
     const relocated = { ...checked.catalog, cases: checked.catalog.cases.map((item) => ({ ...item, location: { ...item.location, line: item.location.line + 10 }, snippet: `reformatted ${item.snippet}` })) };
     const result = buildReleaseDiff({ production: createReleaseCatalogSnapshot(checked.catalog, '6e2b11a'), staging: { snapshot: createReleaseCatalogSnapshot(relocated, '7f3a12c') } });
     expect(result.ok && result.view.groups).toEqual([]);
+  });
+
+  it('compares catalog content independently of commit and top-level ordering', async () => {
+    const checked = await checkProject(path.resolve('fixtures/quality-dashboard/test-manager.yaml'));
+    if (!checked.ok) throw new Error('fixture catalog must be valid');
+    const left = createReleaseCatalogSnapshot(checked.catalog, '6e2b11a');
+    const reordered = {
+      ...createReleaseCatalogSnapshot(checked.catalog, '7f3a12c'),
+      documents: [...left.documents].reverse(),
+      cases: [...left.cases].reverse(),
+    };
+
+    expect(sameReleaseCatalogContent(left, reordered)).toBe(true);
+    expect(sameReleaseCatalogContent(left, {
+      ...reordered,
+      cases: reordered.cases.map((managedCase, index) => index === 0 ? { ...managedCase, title: 'changed' } : managedCase),
+    })).toBe(false);
   });
 
   it('rejects invalid or identical release commits', async () => {

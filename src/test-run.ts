@@ -87,6 +87,9 @@ export const testRunSchema = (idPattern: RegExp) => z.strictObject({
   ciUrl: z.url({ protocol: /^https?$/u }),
   units: z.array(testRunUnitSchema(idPattern)).min(1),
 }).superRefine((run, context) => {
+  if (Date.parse(run.completedAt) < Date.parse(run.startedAt)) {
+    context.addIssue({ code: 'custom', path: ['completedAt'], message: 'completedAt must not precede startedAt' });
+  }
   const unitIds = run.units.map((unit) => unit.unitId);
   if (new Set(unitIds).size !== unitIds.length) context.addIssue({ code: 'custom', path: ['units'], message: 'unitId must be unique within a run' });
   const plannedCaseIds = run.units.flatMap((unit) => unit.plannedCaseIds);

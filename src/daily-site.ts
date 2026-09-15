@@ -21,6 +21,7 @@ const comparisonText: Readonly<Record<Extract<DailyView['comparison'], { state: 
   noPrevious: '比較できる前回実行がありません',
   differentEnvironment: '同じ環境の前回実行がないため比較できません',
   differentScope: '同じ実行範囲の前回実行がないため比較できません',
+  previousIsNewer: '指定された前回実行が今回より新しいため比較できません',
 };
 
 const renderChanges = (view: DailyView): string => {

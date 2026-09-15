@@ -58,9 +58,20 @@ node dist/cli.js daily \
   --unit-artifact fixtures/quality-dashboard/playwright.test-manager-unit.json \
   --stylesheet prototypes/quality-dashboard/assets/dashboard.css \
   --out /tmp/test-manager-daily
+
+node dist/cli.js dashboard \
+  --config fixtures/quality-dashboard/test-manager.yaml \
+  --current-run /path/to/current-run.json \
+  --previous-run /path/to/previous-run.json \
+  --production-snapshot /path/to/production/release-catalog.json \
+  --staging-snapshot /path/to/staging/release-catalog.json \
+  --stylesheet prototypes/quality-dashboard/assets/dashboard.css \
+  --out /tmp/test-manager-dashboard
 ```
 
-`check` は検査成功時に `0`、診断がある場合に `1`、CLI の使い方が不正な場合に `2` を返します。`build`、`daily`、`snapshot`、`release` は入力検査成功後だけ、test-manager所有マーカーを持つ安全な出力ディレクトリへ生成します。
+`check` は検査成功時に `0`、診断がある場合に `1`、CLI の使い方が不正な場合に `2` を返します。`build`、`daily`、`snapshot`、`release`、`dashboard` は入力検査成功後だけ、test-manager所有マーカーを持つ安全な出力ディレクトリへ生成します。
+
+`dashboard` は日次、リリース差分、カタログを一つのリンク切れがない静的サイトとして生成します。`--current-run` は日次表示だけに使用します。リリース差分へ最新のstaging結果を添える場合は、別途 `--latest-staging-run <path>` を指定します。表示するカタログと比較先の意味が食い違わないよう、現在のconfigから得たcatalogとstaging snapshotが一致しない場合は生成を拒否します。
 
 リリース差分では、productionとstagingの各checkoutで `snapshot --config <path> --commit <sha> --out <path>` を実行します。その `release-catalog.json` 2件を `release --production-snapshot <path> --staging-snapshot <path> --stylesheet <path> --out <path>` へ渡します。stagingの実行事実も表示する場合は、同じcommit・`staging`環境のrunを `--latest-staging-run` で指定します。
 
