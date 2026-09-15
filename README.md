@@ -46,12 +46,12 @@ pnpm install --frozen-lockfile
 pnpm exec playwright install chromium
 pnpm build
 
-node dist/cli.js check --config fixtures/valid/test-manager.yaml
-node dist/cli.js build \
+node dist/cli-entry.js check --config fixtures/valid/test-manager.yaml
+node dist/cli-entry.js build \
   --config fixtures/valid/test-manager.yaml \
   --out /tmp/test-manager-site
 
-node dist/cli.js daily \
+node dist/cli-entry.js daily \
   --config fixtures/quality-dashboard/test-manager.yaml \
   --manifest fixtures/quality-dashboard/manifest.json \
   --completed-at 2026-09-13T00:01:00Z \
@@ -59,7 +59,7 @@ node dist/cli.js daily \
   --unit-artifact fixtures/quality-dashboard/playwright.test-manager-unit.json \
   --out /tmp/test-manager-daily
 
-node dist/cli.js dashboard \
+node dist/cli-entry.js dashboard \
   --config fixtures/quality-dashboard/test-manager.yaml \
   --current-run /path/to/current-run.json \
   --previous-run /path/to/previous-run.json \
@@ -281,7 +281,7 @@ steps:
 依存関係のインストールとビルド後に `check` を実行します。
 
 ```sh
-node dist/cli.js check --config ./test-manager.yaml
+node dist/cli-entry.js check --config ./test-manager.yaml
 ```
 
 診断はファイル、行、列、診断コード、対象、理由を含みます。たとえば、ケースの belongsTo が存在しない、ID が重複している、必須項目が欠けている、といった変更をマージ前に検出できます。

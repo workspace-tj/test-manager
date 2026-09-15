@@ -1,5 +1,5 @@
-#!/usr/bin/env node
 import path from 'node:path';
+
 import { checkProject } from './catalog.js';
 import { renderDailySite } from './daily-site.js';
 import { buildDailyView } from './daily-view.js';
@@ -13,16 +13,15 @@ import { assembleTestRun } from './test-run-assembly.js';
 import { parseTestRun } from './test-run.js';
 import { renderQualitySite } from './quality-site.js';
 import { loadDashboardStyles } from './dashboard-styles.js';
-import { cliUsage, parseCliArguments } from './cli-arguments.js';
+import type { CliArguments } from './cli-arguments.js';
 import { readJsonInput } from './cli-input.js';
 
-const main = async (): Promise<number> => {
-  const args = process.argv.slice(2);
-  const parsed = parseCliArguments(args);
-  if (!parsed) {
-    console.error(cliUsage);
-    return 2;
-  }
+export type CliOutput = Readonly<{
+  log: (message: string) => void;
+  error: (message: string) => void;
+}>;
+
+export const executeCliCommand = async (parsed: CliArguments, output: CliOutput): Promise<number> => {
   if (parsed.command === 'release') {
     const productionSnapshotPath = parsed.productionSnapshot;
     const stagingSnapshotPath = parsed.stagingSnapshot;
@@ -44,25 +43,25 @@ const main = async (): Promise<number> => {
     if (!diff.ok) throw new Error(`invalid release comparison: ${diff.problems.join('; ')}`);
     const stylesheet = await loadDashboardStyles(parsed.stylesheet);
     await writeManagedFiles(renderReleaseSite(diff.view, stylesheet), parsed.out, path.resolve(stagingSnapshotPath), 'release-v1\n');
-    console.log(`release build passed: ${parsed.out}`);
+    output.log(`release build passed: ${parsed.out}`);
     return 0;
   }
   const config = parsed.config;
   const command = parsed.command;
   const result = await checkProject(config);
   if (!result.ok) {
-    for (const item of result.diagnostics) console.error(formatDiagnostic(item));
-    console.error(`check failed with ${result.diagnostics.length} diagnostic(s)`);
+    for (const item of result.diagnostics) output.error(formatDiagnostic(item));
+    output.error(`check failed with ${result.diagnostics.length} diagnostic(s)`);
     return 1;
   }
   if (command === 'check') {
-    console.log(`check passed: ${result.catalog.documents.length} document(s), ${result.catalog.cases.length} case(s)`);
+    output.log(`check passed: ${result.catalog.documents.length} document(s), ${result.catalog.cases.length} case(s)`);
     return 0;
   }
   if (command === 'snapshot') {
     const snapshot = createReleaseCatalogSnapshot(result.catalog, parsed.commit);
     await writeManagedFiles(new Map([['release-catalog.json', `${JSON.stringify(snapshot, null, 2)}\n`]]), parsed.out, result.catalog.projectRoot, 'release-catalog-v1\n');
-    console.log(`snapshot build passed: ${parsed.out}`);
+    output.log(`snapshot build passed: ${parsed.out}`);
     return 0;
   }
   if (command === 'dashboard') {
@@ -92,7 +91,7 @@ const main = async (): Promise<number> => {
     const release = buildReleaseDiff({ production: production.data, staging: { snapshot: staging.data, ...(latestStagingRun?.data ? { latestRun: latestStagingRun.data } : {}) } });
     if (!release.ok) throw new Error(`invalid release comparison: ${release.problems.join('; ')}`);
     await writeManagedFiles(renderQualitySite(result.catalog, daily.view, release.view, stylesheet), parsed.out, result.catalog.projectRoot, 'quality-site-v1\n');
-    console.log(`dashboard build passed: ${parsed.out}`);
+    output.log(`dashboard build passed: ${parsed.out}`);
     return 0;
   }
   if (command === 'daily') {
@@ -111,15 +110,10 @@ const main = async (): Promise<number> => {
     if (!view.ok) throw new Error(`daily view contains unknown case IDs: ${view.problems.map((problem) => problem.caseId).join(', ')}`);
     const stylesheet = await loadDashboardStyles(parsed.stylesheet);
     await writeManagedFiles(renderDailySite(view.view, stylesheet), parsed.out, result.catalog.projectRoot, 'daily-v1\n');
-    console.log(`daily build passed: ${parsed.out}`);
+    output.log(`daily build passed: ${parsed.out}`);
     return 0;
   }
   await writeSite(result.catalog, parsed.out);
-  console.log(`build passed: ${parsed.out}`);
+  output.log(`build passed: ${parsed.out}`);
   return 0;
 };
-
-main().then((code) => { process.exitCode = code; }).catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});

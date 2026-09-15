@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { parseReleaseCatalogSnapshot } from './release-catalog.js';
 
 const execute = promisify(execFile);
-const cli = path.resolve('src/cli.ts');
+const cli = path.resolve('src/cli-entry.ts');
 
 const run = async (args: ReadonlyArray<string>): Promise<Readonly<{ code: number; stdout: string; stderr: string }>> => {
   try {
