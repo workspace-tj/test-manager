@@ -1,6 +1,7 @@
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { relativeContainedPath, relativeExistingContainedPath } from './contained-path.js';
 import type { FullConfig, FullResult, Reporter, Suite, TestCase, TestError, TestResult, WorkerInfo } from '@playwright/test/reporter';
 import { testRunUnitArtifactSchema } from './test-run-assembly.js';
 
@@ -110,11 +111,6 @@ const projectCase = (testCase: TestCase | PlaywrightCaseSource): PlaywrightCaseS
   })),
 });
 
-const isWithin = (root: string, candidate: string): boolean => {
-  const relative = path.relative(root, candidate);
-  return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
-};
-
 const projectResult = (
   result: TestResult | PlaywrightResultSource,
   artifactRoot: string,
@@ -125,10 +121,9 @@ const projectResult = (
   startTime: result.startTime,
   attachments: result.attachments.flatMap((attachment) => {
     if (attachment.path === undefined) return [];
-    const absoluteRoot = path.resolve(artifactRoot);
-    const absoluteAttachment = path.resolve(attachment.path);
-    if (!isWithin(absoluteRoot, absoluteAttachment)) throw new Error(`Playwright attachment is outside artifactRoot: ${attachment.name}`);
-    return [{ name: attachment.name, path: path.relative(absoluteRoot, absoluteAttachment).split(path.sep).join('/') }];
+    const relative = relativeExistingContainedPath(artifactRoot, attachment.path);
+    if (!relative) throw new Error(`Playwright attachment is outside artifactRoot: ${attachment.name}`);
+    return [{ name: attachment.name, path: relative }];
   }),
 });
 
@@ -188,7 +183,7 @@ export class TestManagerPlaywrightReporter implements Reporter {
     const outputDirectory = path.resolve(this.#options.outputDirectory);
     const unitId = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,127})$/u).parse(this.#options.unitId);
     const outputFile = path.join(outputDirectory, `${unitId}.test-manager-unit.json`);
-    if (!isWithin(outputDirectory, outputFile)) throw new Error('Playwright unit artifact path escapes outputDirectory');
+    if (!relativeContainedPath(outputDirectory, outputFile)) throw new Error('Playwright unit artifact path escapes outputDirectory');
     mkdirSync(outputDirectory, { recursive: true });
     const temporaryFile = path.join(outputDirectory, `.${unitId}.${process.pid}.tmp`);
     writeFileSync(temporaryFile, `${JSON.stringify(parsed.data, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });

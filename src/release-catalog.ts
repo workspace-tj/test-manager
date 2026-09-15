@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Catalog, ManagedCase } from './model.js';
+import { CommitSchema } from './run-identity.js';
 
-const CommitSchema = z.string().regex(/^[0-9a-f]{7,64}$/u);
 const IdentifierSchema = z.string().min(1);
 const fieldsSchema = z.object({ belongsTo: IdentifierSchema, refs: z.array(IdentifierSchema).optional() }).catchall(z.unknown());
 const caseBase = {
