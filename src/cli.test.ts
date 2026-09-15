@@ -25,13 +25,6 @@ describe('CLI process boundary', () => {
   it('returns 0 for a valid project and 2 for invalid usage', async () => {
     expect((await run(['check', '--config', 'fixtures/valid/test-manager.yaml'])).code).toBe(0);
     expect((await run([])).code).toBe(2);
-    expect((await run(['check', '--config'])).code).toBe(2);
-    expect((await run(['check', '--config', 'fixtures/valid/test-manager.yaml', '--unknown', 'x'])).code).toBe(2);
-    expect((await run(['check', '--config', 'fixtures/valid/test-manager.yaml', '--config', 'fixtures/valid/test-manager.yaml'])).code).toBe(2);
-    expect((await run(['daily', '--config', 'fixtures/valid/test-manager.yaml', '--unit-artifact', '--out', '/tmp/x'])).code).toBe(2);
-    expect((await run(['build', '--config', 'does-not-exist.yaml'])).code).toBe(2);
-    expect((await run(['build', '--config', 'does-not-exist.yaml', '--out', ''])).code).toBe(2);
-    expect((await run(['daily', '--config', 'does-not-exist.yaml'])).code).toBe(2);
   });
 
   it('returns 1 and does not publish output when validation fails', async () => {

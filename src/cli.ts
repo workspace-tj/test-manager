@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { checkProject } from './catalog.js';
 import { renderDailySite } from './daily-site.js';
@@ -15,8 +14,7 @@ import { parseTestRun } from './test-run.js';
 import { renderQualitySite } from './quality-site.js';
 import { loadDashboardStyles } from './dashboard-styles.js';
 import { cliUsage, parseCliArguments } from './cli-arguments.js';
-
-const readJson = async (file: string): Promise<unknown> => JSON.parse(await readFile(path.resolve(file), 'utf8'));
+import { readJsonInput } from './cli-input.js';
 
 const main = async (): Promise<number> => {
   const args = process.argv.slice(2);
@@ -29,14 +27,14 @@ const main = async (): Promise<number> => {
     const productionSnapshotPath = parsed.productionSnapshot;
     const stagingSnapshotPath = parsed.stagingSnapshot;
     const [production, staging] = await Promise.all([
-      readJson(productionSnapshotPath).then(parseReleaseCatalogSnapshot),
-      readJson(stagingSnapshotPath).then(parseReleaseCatalogSnapshot),
+      readJsonInput(productionSnapshotPath, 'production catalog snapshot').then(parseReleaseCatalogSnapshot),
+      readJsonInput(stagingSnapshotPath, 'staging catalog snapshot').then(parseReleaseCatalogSnapshot),
     ]);
     if (!production.success) throw new Error(`invalid production catalog snapshot: ${production.error.message}`);
     if (!staging.success) throw new Error(`invalid staging catalog snapshot: ${staging.error.message}`);
     const stagingRunPath = parsed.latestStagingRun;
     const stagingRun = stagingRunPath
-      ? parseTestRun(await readJson(stagingRunPath), new RegExp(staging.data.idPattern, 'u'))
+      ? parseTestRun(await readJsonInput(stagingRunPath, 'latest staging TestRun'), new RegExp(staging.data.idPattern, 'u'))
       : undefined;
     if (stagingRun && !stagingRun.success) throw new Error(`invalid staging TestRun: ${stagingRun.error.message}`);
     const diff = buildReleaseDiff({
@@ -75,11 +73,11 @@ const main = async (): Promise<number> => {
     const latestStagingRunPath = parsed.latestStagingRun;
     const idPattern = new RegExp(result.catalog.rules.idPattern, 'u');
     const [currentRun, previousRun, production, staging, latestStagingRun, stylesheet] = await Promise.all([
-      readJson(currentPath).then((input) => parseTestRun(input, idPattern)),
-      previousPath ? readJson(previousPath).then((input) => parseTestRun(input, idPattern)) : undefined,
-      readJson(productionPath).then(parseReleaseCatalogSnapshot),
-      readJson(stagingPath).then(parseReleaseCatalogSnapshot),
-      latestStagingRunPath ? readJson(latestStagingRunPath).then((input) => parseTestRun(input, idPattern)) : undefined,
+      readJsonInput(currentPath, 'current TestRun').then((input) => parseTestRun(input, idPattern)),
+      previousPath ? readJsonInput(previousPath, 'previous TestRun').then((input) => parseTestRun(input, idPattern)) : undefined,
+      readJsonInput(productionPath, 'production catalog snapshot').then(parseReleaseCatalogSnapshot),
+      readJsonInput(stagingPath, 'staging catalog snapshot').then(parseReleaseCatalogSnapshot),
+      latestStagingRunPath ? readJsonInput(latestStagingRunPath, 'latest staging TestRun').then((input) => parseTestRun(input, idPattern)) : undefined,
       loadDashboardStyles(parsed.stylesheet),
     ]);
     if (!currentRun.success) throw new Error(`invalid current TestRun: ${currentRun.error.message}`);
@@ -100,14 +98,14 @@ const main = async (): Promise<number> => {
   if (command === 'daily') {
     const idPattern = new RegExp(result.catalog.rules.idPattern, 'u');
     const currentResult = parsed.current.type === 'run'
-      ? parseTestRun(await readJson(parsed.current.path), idPattern)
+      ? parseTestRun(await readJsonInput(parsed.current.path, 'current TestRun'), idPattern)
       : assembleTestRun({
-        manifest: await readJson(parsed.current.manifest),
+        manifest: await readJsonInput(parsed.current.manifest, 'CI manifest'),
         completedAt: parsed.current.completedAt,
-        unitArtifacts: await Promise.all(parsed.current.unitArtifacts.map(readJson)),
+        unitArtifacts: await Promise.all(parsed.current.unitArtifacts.map((file) => readJsonInput(file, 'unit artifact'))),
       }, idPattern);
     if (!currentResult.success) throw new Error(`invalid current TestRun: ${currentResult.error.message}`);
-    const previousResult = parsed.previousRun ? parseTestRun(await readJson(parsed.previousRun), idPattern) : undefined;
+    const previousResult = parsed.previousRun ? parseTestRun(await readJsonInput(parsed.previousRun, 'previous TestRun'), idPattern) : undefined;
     if (previousResult && !previousResult.success) throw new Error(`invalid previous TestRun: ${previousResult.error.message}`);
     const view = buildDailyView(result.catalog, currentResult.data, previousResult?.data);
     if (!view.ok) throw new Error(`daily view contains unknown case IDs: ${view.problems.map((problem) => problem.caseId).join(', ')}`);

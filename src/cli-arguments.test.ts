@@ -29,6 +29,8 @@ describe('CLI argument grammar', () => {
 
   it.each([
     ['unknown command', ['unknown']],
+    ['missing flag value', ['check', '--config']],
+    ['empty flag value', ['build', '--config', 'x', '--out', '']],
     ['unknown flag', ['check', '--config', 'x', '--out', 'site']],
     ['duplicate scalar flag', ['build', '--config', 'x', '--config', 'y', '--out', 'site']],
     ['mixed daily current sources', ['daily', '--config', 'x', '--out', 'site', '--current-run', 'run.json', '--manifest', 'manifest.json', '--completed-at', 'now']],
