@@ -1,17 +1,22 @@
 import { catalogSearchScript, catalogStyles } from './catalog-assets.js';
 import { sortDocumentsForDisplay } from './documents.js';
 import type { Catalog, KnowledgeDocument, ManagedCase } from './model.js';
-import { escapeHtml } from './html.js';
+import { escapeHtml, renderAppHeader, renderHtmlDocument } from './html.js';
 const safeName = (value: string): string => encodeURIComponent(value);
 const compareText = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 const pretty = (value: unknown): string => escapeHtml(JSON.stringify(value, null, 2));
 
 type Section = 'catalog' | 'cases' | 'documents';
 
-const layout = (title: string, section: Section, rootPrefix: string, body: string): string => `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(title)} · Test Manager</title><link rel="stylesheet" href="${rootPrefix}assets/style.css"></head>
-<body><header class="app-header"><div class="header-inner"><a class="brand" href="${rootPrefix}index.html"><span class="brand-mark" aria-hidden="true">✓</span><span>Test Manager</span></a><nav class="segmented-nav" aria-label="カタログナビゲーション">${(['catalog', 'cases', 'documents'] as const).map((item) => `<a href="${rootPrefix}${item === 'catalog' ? 'index.html' : `${item}/index.html`}"${section === item ? ' aria-current="page"' : ''}>${item === 'catalog' ? 'ドメイン' : item === 'cases' ? 'ケース検索' : '仕様・判断'}</a>`).join('')}</nav><span class="header-spacer" aria-hidden="true"></span></div></header><main>${body}</main></body></html>\n`;
+const layout = (title: string, section: Section, rootPrefix: string, body: string): string => {
+  const navigation = `<nav class="segmented-nav" aria-label="カタログナビゲーション">${(['catalog', 'cases', 'documents'] as const).map((item) => `<a href="${rootPrefix}${item === 'catalog' ? 'index.html' : `${item}/index.html`}"${section === item ? ' aria-current="page"' : ''}>${item === 'catalog' ? 'ドメイン' : item === 'cases' ? 'ケース検索' : '仕様・判断'}</a>`).join('')}</nav>`;
+  return renderHtmlDocument({
+    title,
+    stylesheetHref: `${rootPrefix}assets/style.css`,
+    headerHtml: renderAppHeader({ homeHref: `${rootPrefix}index.html`, navigationHtml: navigation, spacer: true }),
+    bodyHtml: body,
+  });
+};
 
 const breadcrumbs = (document: KnowledgeDocument, byId: ReadonlyMap<string, KnowledgeDocument>): ReadonlyArray<KnowledgeDocument> => {
   const result = [document];
