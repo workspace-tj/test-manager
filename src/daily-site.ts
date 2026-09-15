@@ -1,7 +1,5 @@
 import type { DailyChange, DailyView } from './daily-view.js';
-
-const escapeHtml = (value: unknown): string => String(value)
-  .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+import { escapeHtml } from './html.js';
 
 const changeLabel: Readonly<Record<DailyChange['kind'], string>> = {
   newFailure: '新規失敗',

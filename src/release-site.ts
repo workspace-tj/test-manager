@@ -1,7 +1,5 @@
 import type { ReleaseCaseChange, ReleaseDiffView } from './release-diff.js';
-
-const escapeHtml = (value: unknown): string => String(value)
-  .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+import { escapeHtml } from './html.js';
 
 const changeLabel: Readonly<Record<ReleaseCaseChange['kind'], string>> = { added: '追加', changed: '変更', removed: '削除' };
 const changeClass: Readonly<Record<ReleaseCaseChange['kind'], string>> = { added: 'success', changed: 'warning', removed: 'neutral' };

@@ -1,9 +1,7 @@
 import { catalogSearchScript, catalogStyles } from './catalog-assets.js';
 import { sortDocumentsForDisplay } from './documents.js';
 import type { Catalog, KnowledgeDocument, ManagedCase } from './model.js';
-
-const escapeHtml = (value: unknown): string => String(value)
-  .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+import { escapeHtml } from './html.js';
 const safeName = (value: string): string => encodeURIComponent(value);
 const compareText = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 const pretty = (value: unknown): string => escapeHtml(JSON.stringify(value, null, 2));
