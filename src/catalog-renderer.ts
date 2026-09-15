@@ -2,18 +2,21 @@ import { catalogSearchScript, catalogStyles } from './catalog-assets.js';
 import { sortDocumentsForDisplay } from './documents.js';
 import type { Catalog, KnowledgeDocument, ManagedCase } from './model.js';
 import { escapeHtml, renderAppHeader, renderHtmlDocument } from './html.js';
+import { renderDashboardNavigation } from './dashboard-navigation.js';
 const safeName = (value: string): string => encodeURIComponent(value);
 const compareText = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 const pretty = (value: unknown): string => escapeHtml(JSON.stringify(value, null, 2));
 
 type Section = 'catalog' | 'cases' | 'documents';
 
-const layout = (title: string, section: Section, rootPrefix: string, body: string): string => {
-  const navigation = `<nav class="segmented-nav" aria-label="カタログナビゲーション">${(['catalog', 'cases', 'documents'] as const).map((item) => `<a href="${rootPrefix}${item === 'catalog' ? 'index.html' : `${item}/index.html`}"${section === item ? ' aria-current="page"' : ''}>${item === 'catalog' ? 'ドメイン' : item === 'cases' ? 'ケース検索' : '仕様・判断'}</a>`).join('')}</nav>`;
+const renderLayout = (title: string, section: Section, rootPrefix: string, body: string, integrated: boolean): string => {
+  const navigation = integrated
+    ? renderDashboardNavigation({ active: 'catalog', rootPrefix: `${rootPrefix}../` })
+    : `<nav class="segmented-nav" aria-label="カタログナビゲーション">${(['catalog', 'cases', 'documents'] as const).map((item) => `<a href="${rootPrefix}${item === 'catalog' ? 'index.html' : `${item}/index.html`}"${section === item ? ' aria-current="page"' : ''}>${item === 'catalog' ? 'ドメイン' : item === 'cases' ? 'ケース検索' : '仕様・判断'}</a>`).join('')}</nav>`;
   return renderHtmlDocument({
     title,
     stylesheetHref: `${rootPrefix}assets/style.css`,
-    headerHtml: renderAppHeader({ homeHref: `${rootPrefix}index.html`, navigationHtml: navigation, spacer: true }),
+    headerHtml: renderAppHeader({ homeHref: integrated ? `${rootPrefix}../index.html` : `${rootPrefix}index.html`, navigationHtml: navigation, spacer: true }),
     bodyHtml: body,
   });
 };
@@ -35,8 +38,9 @@ const markdown = (source: string): string => source.trim().split(/\r?\n/u).map((
   return heading ? `<h${heading[1]?.length}>${escapeHtml(heading[2])}</h${heading[1]?.length}>` : line ? `<p>${escapeHtml(line)}</p>` : '';
 }).join('');
 
-export const renderCatalogSite = (catalog: Catalog): ReadonlyMap<string, string> => {
+export const renderCatalogSite = (catalog: Catalog, integrated = false): ReadonlyMap<string, string> => {
   const files = new Map<string, string>();
+  const layout = (title: string, section: Section, rootPrefix: string, body: string): string => renderLayout(title, section, rootPrefix, body, integrated);
   const documents = sortDocumentsForDisplay(catalog.documents, catalog.rules);
   const cases = [...catalog.cases].sort((left, right) => compareText(left.id, right.id));
   const byId = new Map(documents.map((document) => [document.id, document]));

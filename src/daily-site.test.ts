@@ -40,8 +40,10 @@ describe('daily site', () => {
     expect(html).toContain('orders');
     expect(html).toContain('2 / 2');
     expect(html).toContain('role="columnheader">結果取得率');
-    expect(html).toContain('aria-label="結果取得率100%"');
-    expect(html).toContain('aria-label="対象ケースなし"');
+    expect(html).toContain('role="rowheader">受注');
+    expect(html).toContain('role="cell" class="result-count">2 / 2');
+    expect(html).toContain('role="progressbar" aria-label="結果取得率100%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"');
+    expect(html).toContain('role="progressbar" aria-label="対象ケースなし" aria-valuemin="0" aria-valuemax="100"');
     expect(html).not.toContain('1,324');
     expect(files.get('assets/dashboard.css')).toContain('.domain-table-head');
   });

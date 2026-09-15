@@ -64,6 +64,8 @@ describe('generated quality site in a browser', () => {
       const page = await newPage(browser);
       await page.goto(origin);
       expect(await page.getByRole('heading', { name: 'stagingの日次実行', exact: true }).isVisible()).toBe(true);
+      expect(await page.locator('[role="rowgroup"] [role="row"]').evaluateAll((rows) => rows.every((row) => [...row.children].every((cell) => cell.getAttribute('role') === 'rowheader' || cell.getAttribute('role') === 'cell')))).toBe(true);
+      expect(await page.getByRole('progressbar').count()).toBeGreaterThan(0);
       await page.getByRole('link', { name: 'リリース差分' }).click();
       expect(await page.getByRole('heading', { name: '前回productionからの変更' }).isVisible()).toBe(true);
       await page.getByRole('link', { name: 'ケース探索' }).click();
@@ -80,10 +82,17 @@ describe('generated quality site in a browser', () => {
     const browser = await chromium.launch({ headless: true });
     try {
       const page = await newPage(browser, { viewport: { width: 390, height: 844 } });
-      await page.goto(`${origin}/catalog/cases/index.html`);
+      for (const [url, heading] of [
+        [origin, 'stagingの日次実行'],
+        [`${origin}/release.html`, '前回productionからの変更'],
+        [`${origin}/catalog/cases/index.html`, 'ケース検索'],
+      ] as const) {
+        await page.goto(url);
+        expect(await page.getByRole('heading', { name: heading, exact: true }).isVisible()).toBe(true);
+        expect(await page.getByRole('navigation', { name: '主要ナビゲーション' }).isVisible()).toBe(true);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      }
       expect(await page.getByRole('searchbox').isVisible()).toBe(true);
-      expect(await page.getByRole('navigation', { name: '主要ナビゲーション' }).isVisible()).toBe(true);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     } finally {
       await browser.close();
     }

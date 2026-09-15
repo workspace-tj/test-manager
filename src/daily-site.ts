@@ -33,7 +33,8 @@ const renderDomains = (view: DailyView): string => view.domains.map((domain) => 
   const observed = domain.planned - domain.missing;
   const acquisitionRate = domain.planned === 0 ? undefined : Math.round((observed / domain.planned) * 1_000) / 10;
   const acquisitionLabel = acquisitionRate === undefined ? '対象ケースなし' : `結果取得率${acquisitionRate}%`;
-  return `<div class="domain-row" role="row"><strong>${escapeHtml(domain.title)}</strong><span class="result-count">${observed} / ${domain.planned}</span><div class="progress" aria-label="${acquisitionLabel}"><span style="width:${acquisitionRate ?? 0}%"></span></div><span class="metric">${domain.passed}</span><span class="metric text-danger">${domain.failed}</span><span class="metric text-warning">${domain.expectedFailure}</span><span class="metric text-danger">${domain.unexpectedPass}</span><span class="metric text-warning">${domain.missing}</span></div>`;
+  const progressValue = acquisitionRate === undefined ? '' : ` aria-valuenow="${acquisitionRate}"`;
+  return `<div class="domain-row" role="row"><strong role="rowheader">${escapeHtml(domain.title)}</strong><span role="cell" class="result-count">${observed} / ${domain.planned}</span><div role="cell"><div class="progress" role="progressbar" aria-label="${acquisitionLabel}" aria-valuemin="0" aria-valuemax="100"${progressValue}><span style="width:${acquisitionRate ?? 0}%"></span></div></div><span role="cell" class="metric">${domain.passed}</span><span role="cell" class="metric text-danger">${domain.failed}</span><span role="cell" class="metric text-warning">${domain.expectedFailure}</span><span role="cell" class="metric text-danger">${domain.unexpectedPass}</span><span role="cell" class="metric text-warning">${domain.missing}</span></div>`;
 }).join('');
 
 const dailyDomainCss = '.daily-domain-table .domain-table-head,.daily-domain-table .domain-row{grid-template-columns:minmax(140px,1.4fr) 82px minmax(90px,1fr) repeat(5,58px)}';
