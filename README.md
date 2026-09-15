@@ -4,7 +4,7 @@
 
 プロジェクト内に散らばった Vitest、Playwright、Storybook、手動ケースを静的解析し、「このテストはどの仕様に属するか」「参照先が消えていないか」「必要な分類が記録されているか」を検査します。検査済みの情報から、domainを入口に仕様・判断をたどる画面と、ケースを複数語検索や分類で絞り込む画面を生成できます。
 
-カタログ画面はAstro componentとして管理し、CLI実行時に検証済みcatalogを渡して静的HTMLへbuildします。生成物は一時領域で完成させてから、test-managerのmanaged output境界を通して公開します。
+カタログ画面は検証済みcatalogを純粋なTypeScript rendererへ渡して静的HTMLへ変換します。CLI実行時にWebフレームワークを起動せず、持ち運べる生成物をtest-managerのmanaged output境界から公開します。
 
 ![生成されたテストカタログの一覧画面](docs/assets/test-knowledge-catalog.png)
 
