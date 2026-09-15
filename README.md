@@ -43,6 +43,7 @@ CI では `check` を実行して、不整合のある変更を検出できま�
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
 pnpm build
 
 node dist/cli.js check --config fixtures/valid/test-manager.yaml
@@ -56,7 +57,6 @@ node dist/cli.js daily \
   --completed-at 2026-09-13T00:01:00Z \
   --unit-artifact fixtures/quality-dashboard/vitest.test-manager-unit.json \
   --unit-artifact fixtures/quality-dashboard/playwright.test-manager-unit.json \
-  --stylesheet prototypes/quality-dashboard/assets/dashboard.css \
   --out /tmp/test-manager-daily
 
 node dist/cli.js dashboard \
@@ -65,7 +65,6 @@ node dist/cli.js dashboard \
   --previous-run /path/to/previous-run.json \
   --production-snapshot /path/to/production/release-catalog.json \
   --staging-snapshot /path/to/staging/release-catalog.json \
-  --stylesheet prototypes/quality-dashboard/assets/dashboard.css \
   --out /tmp/test-manager-dashboard
 ```
 
@@ -73,7 +72,9 @@ node dist/cli.js dashboard \
 
 `dashboard` は日次、リリース差分、カタログを一つのリンク切れがない静的サイトとして生成します。`--current-run` は日次表示だけに使用します。リリース差分へ最新のstaging結果を添える場合は、別途 `--latest-staging-run <path>` を指定します。表示するカタログと比較先の意味が食い違わないよう、現在のconfigから得たcatalogとstaging snapshotが一致しない場合は生成を拒否します。
 
-リリース差分では、productionとstagingの各checkoutで `snapshot --config <path> --commit <sha> --out <path>` を実行します。その `release-catalog.json` 2件を `release --production-snapshot <path> --staging-snapshot <path> --stylesheet <path> --out <path>` へ渡します。stagingの実行事実も表示する場合は、同じcommit・`staging`環境のrunを `--latest-staging-run` で指定します。
+日次・リリース差分・統合dashboardの標準スタイルはtest-manager自身が同梱します。見た目を置き換える必要がある場合だけ `--stylesheet <path>` を指定します。
+
+リリース差分では、productionとstagingの各checkoutで `snapshot --config <path> --commit <sha> --out <path>` を実行します。その `release-catalog.json` 2件を `release --production-snapshot <path> --staging-snapshot <path> --out <path>` へ渡します。stagingの実行事実も表示する場合は、同じcommit・`staging`環境のrunを `--latest-staging-run` で指定します。
 
 manifestにはrun ID、attempt、environment、commit、scope、開始時刻、HTTP(S)のCI URL、実行予定unitとcase IDだけを記録します。GitHub Actions context全体や機密情報は保存しません。unit artifactが生成されなかった場合は`artifactMissing`、runnerが結果を残して途中終了した場合は`runnerError`などのincomplete理由として扱い、両者を混同しません。attachmentは設定したartifact root内だけを許可し、相対参照として保存します。
 

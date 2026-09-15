@@ -13,15 +13,16 @@ import { writeSite } from './site.js';
 import { assembleTestRun } from './test-run-assembly.js';
 import { parseTestRun } from './test-run.js';
 import { renderQualitySite } from './quality-site.js';
+import { loadDashboardStyles } from './dashboard-styles.js';
 
 const usage = `Usage:
   test-manager check --config <path>
   test-manager build --config <path> --out <path>
   test-manager snapshot --config <path> --commit <sha> --out <path>
-  test-manager daily --config <path> --stylesheet <path> --out <path> --current-run <path> [--previous-run <path>]
-  test-manager daily --config <path> --stylesheet <path> --out <path> --manifest <path> --completed-at <timestamp> [--unit-artifact <path> ...] [--previous-run <path>]
-  test-manager release --production-snapshot <path> --staging-snapshot <path> --stylesheet <path> --out <path> [--latest-staging-run <path>]
-  test-manager dashboard --config <path> --current-run <path> [--previous-run <path>] --production-snapshot <path> --staging-snapshot <path> [--latest-staging-run <path>] --stylesheet <path> --out <path>`;
+  test-manager daily --config <path> [--stylesheet <path>] --out <path> --current-run <path> [--previous-run <path>]
+  test-manager daily --config <path> [--stylesheet <path>] --out <path> --manifest <path> --completed-at <timestamp> [--unit-artifact <path> ...] [--previous-run <path>]
+  test-manager release --production-snapshot <path> --staging-snapshot <path> [--stylesheet <path>] --out <path> [--latest-staging-run <path>]
+  test-manager dashboard --config <path> --current-run <path> [--previous-run <path>] --production-snapshot <path> --staging-snapshot <path> [--latest-staging-run <path>] [--stylesheet <path>] --out <path>`;
 
 type Command = 'check' | 'build' | 'snapshot' | 'daily' | 'release' | 'dashboard';
 type ParsedArguments = Readonly<{ command: Command; flags: ReadonlyMap<string, ReadonlyArray<string>> }>;
@@ -53,9 +54,9 @@ const valueOf = (parsed: ParsedArguments, flag: string): string | undefined => p
 const readJson = async (file: string): Promise<unknown> => JSON.parse(await readFile(path.resolve(file), 'utf8'));
 
 const hasValidUsage = (parsed: ParsedArguments): boolean => {
-  if (parsed.command === 'release') return ['--production-snapshot', '--staging-snapshot', '--stylesheet', '--out']
+  if (parsed.command === 'release') return ['--production-snapshot', '--staging-snapshot', '--out']
     .every((flag) => valueOf(parsed, flag) !== undefined);
-  if (parsed.command === 'dashboard') return ['--config', '--current-run', '--production-snapshot', '--staging-snapshot', '--stylesheet', '--out']
+  if (parsed.command === 'dashboard') return ['--config', '--current-run', '--production-snapshot', '--staging-snapshot', '--out']
     .every((flag) => valueOf(parsed, flag) !== undefined);
   if (!valueOf(parsed, '--config')) return false;
   if (parsed.command === 'check') return true;
@@ -68,7 +69,6 @@ const hasValidUsage = (parsed: ParsedArguments): boolean => {
   const usesCurrent = currentPath !== undefined;
   const usesAssembly = manifestPath !== undefined || completedAt !== undefined || artifactPaths.length > 0;
   return valueOf(parsed, '--out') !== undefined
-    && valueOf(parsed, '--stylesheet') !== undefined
     && usesCurrent !== usesAssembly
     && (!usesAssembly || (manifestPath !== undefined && completedAt !== undefined));
 };
@@ -85,7 +85,7 @@ const main = async (): Promise<number> => {
     const stagingSnapshotPath = valueOf(parsed, '--staging-snapshot');
     const stylesheetPath = valueOf(parsed, '--stylesheet');
     const out = valueOf(parsed, '--out');
-    if (!productionSnapshotPath || !stagingSnapshotPath || !stylesheetPath || !out) return 2;
+    if (!productionSnapshotPath || !stagingSnapshotPath || !out) return 2;
     const [production, staging] = await Promise.all([
       readJson(productionSnapshotPath).then(parseReleaseCatalogSnapshot),
       readJson(stagingSnapshotPath).then(parseReleaseCatalogSnapshot),
@@ -102,7 +102,7 @@ const main = async (): Promise<number> => {
       staging: { snapshot: staging.data, ...(stagingRun?.data ? { latestRun: stagingRun.data } : {}) },
     });
     if (!diff.ok) throw new Error(`invalid release comparison: ${diff.problems.join('; ')}`);
-    const stylesheet = await readFile(path.resolve(stylesheetPath), 'utf8');
+    const stylesheet = await loadDashboardStyles(stylesheetPath);
     await writeManagedFiles(renderReleaseSite(diff.view, stylesheet), out, path.resolve(stagingSnapshotPath), 'release-v1\n');
     console.log(`release build passed: ${out}`);
     return 0;
@@ -137,7 +137,7 @@ const main = async (): Promise<number> => {
     const stagingPath = valueOf(parsed, '--staging-snapshot');
     const latestStagingRunPath = valueOf(parsed, '--latest-staging-run');
     const stylesheetPath = valueOf(parsed, '--stylesheet');
-    if (!out || !currentPath || !productionPath || !stagingPath || !stylesheetPath) return 2;
+    if (!out || !currentPath || !productionPath || !stagingPath) return 2;
     const idPattern = new RegExp(result.catalog.rules.idPattern, 'u');
     const [currentRun, previousRun, production, staging, latestStagingRun, stylesheet] = await Promise.all([
       readJson(currentPath).then((input) => parseTestRun(input, idPattern)),
@@ -145,7 +145,7 @@ const main = async (): Promise<number> => {
       readJson(productionPath).then(parseReleaseCatalogSnapshot),
       readJson(stagingPath).then(parseReleaseCatalogSnapshot),
       latestStagingRunPath ? readJson(latestStagingRunPath).then((input) => parseTestRun(input, idPattern)) : undefined,
-      readFile(path.resolve(stylesheetPath), 'utf8'),
+      loadDashboardStyles(stylesheetPath),
     ]);
     if (!currentRun.success) throw new Error(`invalid current TestRun: ${currentRun.error.message}`);
     if (previousRun && !previousRun.success) throw new Error(`invalid previous TestRun: ${previousRun.error.message}`);
@@ -170,7 +170,7 @@ const main = async (): Promise<number> => {
     const manifestPath = valueOf(parsed, '--manifest');
     const completedAt = valueOf(parsed, '--completed-at');
     const artifactPaths = parsed.flags.get('--unit-artifact') ?? [];
-    if (!out || !stylesheetPath) return 2;
+    if (!out) return 2;
     const idPattern = new RegExp(result.catalog.rules.idPattern, 'u');
     const currentResult = currentPath
       ? parseTestRun(await readJson(currentPath), idPattern)
@@ -184,7 +184,7 @@ const main = async (): Promise<number> => {
     if (previousResult && !previousResult.success) throw new Error(`invalid previous TestRun: ${previousResult.error.message}`);
     const view = buildDailyView(result.catalog, currentResult.data, previousResult?.data);
     if (!view.ok) throw new Error(`daily view contains unknown case IDs: ${view.problems.map((problem) => problem.caseId).join(', ')}`);
-    const stylesheet = await readFile(path.resolve(stylesheetPath), 'utf8');
+    const stylesheet = await loadDashboardStyles(stylesheetPath);
     await writeManagedFiles(renderDailySite(view.view, stylesheet), out, result.catalog.projectRoot, 'daily-v1\n');
     console.log(`daily build passed: ${out}`);
     return 0;

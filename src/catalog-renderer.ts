@@ -88,7 +88,7 @@ export const renderCatalogSite = (catalog: Catalog): ReadonlyMap<string, string>
     files.set(`cases/${safeName(item.id)}.html`, layout(item.title, 'cases', '../', `<h1>${escapeHtml(item.title)}</h1><p><code>${escapeHtml(item.id)}</code> · ${escapeHtml(item.source)} · ${escapeHtml(item.status)}</p><h2>所属・分類</h2><pre>${pretty(item.fields)}</pre><h2>条件・理由</h2><pre>${pretty(item.details)}</pre>${item.procedure ? `<h2>操作と期待結果</h2><pre>${pretty(item.procedure)}</pre>` : ''}${parameters ? `<h2>each入力表</h2><pre>${pretty(parameters)}</pre>` : ''}<h2>関連する仕様・判断</h2><ul>${refs.flatMap((id) => { const document = byId.get(id); return document ? [`<li>${linkDocument(document)}</li>`] : []; }).join('')}</ul><h2>ソース</h2><p><code>${escapeHtml(item.location.file)}:${item.location.line}</code></p><pre>${escapeHtml(item.snippet)}</pre>`));
   }
   const publicDocuments = documents.map(({ fieldLocations: _fieldLocations, ...document }) => document);
-  files.set('assets/style.css', catalogStyles);
+  files.set('assets/style.css', `${catalogStyles}\n[hidden]{display:none!important}\n`);
   files.set('assets/search.js', catalogSearchScript);
   files.set('catalog.json', `${JSON.stringify({ documents: publicDocuments, cases }, null, 2)}\n`);
   files.set('.test-manager-output', 'v1\n');

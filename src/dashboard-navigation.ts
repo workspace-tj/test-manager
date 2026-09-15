@@ -8,7 +8,7 @@ export type DashboardNavigation = Readonly<{
 const pages: ReadonlyArray<Readonly<{ page: DashboardPage; href: string; label: string }>> = [
   { page: 'daily', href: 'index.html', label: '日次実行' },
   { page: 'release', href: 'release.html', label: 'リリース差分' },
-  { page: 'catalog', href: 'catalog/index.html', label: 'ケース探索' },
+  { page: 'catalog', href: 'catalog/cases/index.html', label: 'ケース探索' },
 ];
 
 export const renderDashboardNavigation = ({ active, rootPrefix }: DashboardNavigation): string =>

@@ -1,10 +1,10 @@
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { checkProject } from './catalog.js';
 import { buildDailyView } from './daily-view.js';
 import { renderDailySite } from './daily-site.js';
 import { parseTestRun } from './test-run.js';
+import { loadDashboardStyles } from './dashboard-styles.js';
 
 const makeRun = (runId: string, first: 'passed' | 'failed', second: 'passed' | 'failed') => {
   const parsed = parseTestRun({
@@ -29,7 +29,7 @@ describe('daily site', () => {
     const view = buildDailyView(catalog.catalog, makeRun('current', 'failed', 'passed'), makeRun('previous', 'passed', 'failed'));
     if (!view.ok) throw new Error('daily view must be valid');
 
-    const stylesheet = await readFile(path.resolve('prototypes/quality-dashboard/assets/dashboard.css'), 'utf8');
+    const stylesheet = await loadDashboardStyles();
     const files = renderDailySite(view.view, stylesheet);
     const html = files.get('index.html');
     expect(html).toContain('devの日次実行');
@@ -51,7 +51,7 @@ describe('daily site', () => {
     if (!catalog.ok) throw new Error('fixture must be valid');
     const view = buildDailyView(catalog.catalog, makeRun('current', 'passed', 'passed'));
     if (!view.ok) throw new Error('daily view must be valid');
-    const stylesheet = await readFile(path.resolve('prototypes/quality-dashboard/assets/dashboard.css'), 'utf8');
+    const stylesheet = await loadDashboardStyles();
 
     const html = renderDailySite(view.view, stylesheet).get('index.html');
 

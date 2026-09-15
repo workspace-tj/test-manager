@@ -127,7 +127,7 @@ describe('CLI process boundary', () => {
       'release',
       '--production-snapshot', productionSnapshot,
       '--staging-snapshot', stagingSnapshot,
-      '--stylesheet', 'prototypes/quality-dashboard/assets/dashboard.css', '--out', out,
+      '--out', out,
     ]);
     expect(result.code).toBe(0);
     const html = await readFile(path.join(out, 'release.html'), 'utf8');
@@ -158,12 +158,12 @@ describe('CLI process boundary', () => {
       'dashboard', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--current-run', currentRun,
       '--production-snapshot', path.join(productionDirectory, 'release-catalog.json'),
       '--staging-snapshot', path.join(stagingDirectory, 'release-catalog.json'),
-      '--stylesheet', 'prototypes/quality-dashboard/assets/dashboard.css', '--out', out,
+      '--out', out,
     ]);
 
     expect(result.code).toBe(0);
     expect(await readFile(path.join(out, '.test-manager-output'), 'utf8')).toBe('quality-site-v1\n');
-    expect(await readFile(path.join(out, 'index.html'), 'utf8')).toContain('href="catalog/index.html"');
+    expect(await readFile(path.join(out, 'index.html'), 'utf8')).toContain('href="catalog/cases/index.html"');
     expect(await readFile(path.join(out, 'release.html'), 'utf8')).toContain('前回productionからの変更');
     expect(await readFile(path.join(out, 'catalog/index.html'), 'utf8')).toContain('ドメインから確認内容をたどる');
   });
@@ -192,7 +192,7 @@ describe('CLI process boundary', () => {
     const result = await run([
       'dashboard', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--current-run', currentRun,
       '--production-snapshot', path.join(productionDirectory, 'release-catalog.json'), '--staging-snapshot', stagingPath,
-      '--stylesheet', 'prototypes/quality-dashboard/assets/dashboard.css', '--out', path.join(root, 'site'),
+      '--out', path.join(root, 'site'),
     ]);
 
     expect(result.code).toBe(1);
@@ -202,6 +202,5 @@ describe('CLI process boundary', () => {
 
 const runCliDaily = (args: ReadonlyArray<string>) => run([
   'daily', '--config', 'fixtures/valid/test-manager.yaml',
-  '--stylesheet', 'prototypes/quality-dashboard/assets/dashboard.css',
   ...args,
 ]);
