@@ -28,10 +28,10 @@ export const renderQualitySite = (
     if ([...content.matchAll(pattern)].length !== 1) throw new Error(`expected exactly one navigation in ${active} HTML`);
     return content.replace(pattern, renderDashboardNavigation({ active, rootPrefix }));
   };
-  const releaseFiles = new Map(renderReleaseSite(release, stylesheet));
+  const releaseFiles = new Map(renderReleaseSite(release, stylesheet, true));
   releaseFiles.delete('assets/dashboard.css');
   add('', releaseFiles, (content, file) => file.endsWith('.html') ? withNavigation(content, 'release', '') : content);
-  add('', renderDailySite(daily, stylesheet), (content, file) => file.endsWith('.html') ? withNavigation(content, 'daily', '') : content);
+  add('', renderDailySite(daily, stylesheet, true), (content, file) => file.endsWith('.html') ? withNavigation(content, 'daily', '') : content);
   const catalogFiles = new Map(renderCatalogSite(catalog));
   catalogFiles.delete('.test-manager-output');
   add('catalog/', catalogFiles, (content, file) => file.endsWith('.html') ? withNavigation(content, 'catalog', file.includes('/') ? '../../' : '../') : content);
