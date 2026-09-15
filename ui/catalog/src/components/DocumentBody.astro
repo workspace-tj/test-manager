@@ -1,0 +1,12 @@
+---
+import DocumentHeading from './DocumentHeading.astro';
+
+const { source } = Astro.props as { source: string };
+const lines = source.trim().split(/\r?\n/u).map((line) => {
+  const heading = /^(#{1,6})\s+(.+)$/u.exec(line);
+  return heading ? { kind: 'heading' as const, level: heading[1]?.length ?? 1, text: heading[2] ?? '' } : { kind: 'paragraph' as const, text: line };
+});
+---
+<article>{lines.map((line) => line.kind === 'heading'
+  ? <DocumentHeading level={line.level} text={line.text} />
+  : line.text ? <p>{line.text}</p> : null)}</article>

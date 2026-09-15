@@ -1,0 +1,31 @@
+---
+import type { KnowledgeDocument } from '../../../../../src/model.ts';
+import AppLayout from '../../components/AppLayout.astro';
+import DocumentBody from '../../components/DocumentBody.astro';
+import { breadcrumbs, cases, casesBelow, documentById, documents, safeName } from '../../lib/catalog.ts';
+
+export function getStaticPaths() {
+  return documents.map((document) => ({ params: { id: document.id }, props: { document } }));
+}
+
+const { document } = Astro.props as { document: KnowledgeDocument };
+const path = breadcrumbs(document);
+const children = documents.filter((item) => item.parent === document.id);
+const relatedDocuments = (document.refs ?? []).flatMap((id) => {
+  const related = documentById.get(id);
+  return related ? [related] : [];
+});
+const descendantCases = casesBelow(document);
+const referencedCases = cases.filter((item) => Array.isArray(item.fields.refs) && item.fields.refs.includes(document.id));
+---
+<AppLayout title={document.title} section="documents" rootPrefix="../">
+  <p>{path.map((item, index) => <Fragment>{index > 0 && ' › '}{item.id === document.id ? item.title : <a href={`../documents/${safeName(item.id)}.html`}>{item.title}</a>}</Fragment>)}</p>
+  <h1>{document.title}</h1>
+  <p><code>{document.id}</code> · {document.kind}</p>
+  <DocumentBody source={document.body} />
+  <h2>配下の文書</h2><ul>{children.length > 0 ? children.map((item) => <li><a href={`../documents/${safeName(item.id)}.html`}>{item.title}</a> <small>{item.kind}</small></li>) : <li>0件</li>}</ul>
+  <h2>関連文書</h2><ul>{relatedDocuments.length > 0 ? relatedDocuments.map((item) => <li><a href={`../documents/${safeName(item.id)}.html`}>{item.title}</a></li>) : <li>0件</li>}</ul>
+  <h2>確認定義</h2><ul>{descendantCases.length > 0 ? descendantCases.map((item) => <li><a href={`../cases/${safeName(item.id)}.html`}>{item.title}</a></li>) : <li>0件</li>}</ul>
+  <h2>関連ケース</h2><ul>{referencedCases.length > 0 ? referencedCases.map((item) => <li><a href={`../cases/${safeName(item.id)}.html`}>{item.title}</a></li>) : <li>0件</li>}</ul>
+  <p>Source: <code>{document.location.file}</code></p>
+</AppLayout>
