@@ -11,6 +11,7 @@ import type { Diagnostic, KnowledgeDocument, Location, ManagedCase, ProjectRules
 import { diagnostic, location } from './diagnostics.js';
 import { ambiguousObject, objectProperty, stringValue } from './source-ast.js';
 import { runnerSourceAdapter } from './source-runner-adapters.js';
+import { storybookDeclarations } from './source-storybook-adapter.js';
 import { isRecord, parseStrictYaml } from './yaml.js';
 import { yamlPathLine } from './yaml.js';
 
@@ -159,18 +160,14 @@ export const readTestSource = async (
   } else {
     const detailKeys = Object.entries(rules.case.fields).filter(([, rule]) => rule.placement === 'detail').map(([key]) => key);
     const classificationKeys = Object.entries(rules.case.fields).filter(([, rule]) => rule.placement === 'classification').map(([key]) => key);
-    traverse(parsed.ast, {
-      ExportNamedDeclaration(exportPath: NodePath<t.ExportNamedDeclaration>) {
-        const declaration = exportPath.node.declaration;
-        if (!t.isVariableDeclaration(declaration)) return;
-        for (const variable of declaration.declarations) {
+    for (const { exportNode, declaration, variable } of storybookDeclarations(parsed.ast)) {
           if (!t.isIdentifier(variable.id)) continue;
           if (!t.isObjectExpression(variable.init)) {
-            const marker = markerYaml(immediateComment(exportPath.node) ?? immediateComment(declaration), '@case', relative, Object.keys(rules.case.fields), 'TM207');
+            const marker = markerYaml(immediateComment(exportNode) ?? immediateComment(declaration), '@case', relative, Object.keys(rules.case.fields), 'TM207');
             if (marker.found) diagnostics.push(diagnostic('TM222', relative, variable.id.name, 'marked Story must use an object literal', variable.loc?.start.line ?? 1));
             continue;
           }
-          const before = markerYaml(immediateComment(exportPath.node) ?? immediateComment(declaration), '@case', relative, classificationKeys, 'TM207');
+          const before = markerYaml(immediateComment(exportNode) ?? immediateComment(declaration), '@case', relative, classificationKeys, 'TM207');
           const nameProperty = objectProperty(variable.init, 'name');
           const rawName = stringValue(nameProperty?.value);
           if (!rawName) {
@@ -206,9 +203,7 @@ export const readTestSource = async (
           const skipped = t.isArrayExpression(tags) && tags.elements.some((tag) => stringValue(tag) === 'skip-test');
           const separated = partitionCaseFields(fields.fields, rules.case.fields);
           cases.push({ id: id.data, title: nameMatch[2] ?? rawName, source: 'storybook', status: skipped ? 'skip' : 'active', fields: separated.classification, details: separated.details, location: location(relative, variable.loc?.start.line ?? 1), snippet: source.split(/\r?\n/u).slice((variable.loc?.start.line ?? 1) - 1, variable.loc?.end.line ?? variable.loc?.start.line ?? 1).join('\n') });
-        }
-      },
-    });
+    }
   }
   return { cases, diagnostics };
 };
