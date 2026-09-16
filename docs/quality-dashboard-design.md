@@ -334,7 +334,7 @@ type CaseAttempt = Readonly<{
 }>;
 ```
 
-`CaseObservation` は少なくとも一つのattemptを必須にし、「実行結果なし」をnullableな結果で表しません。欠損は `plannedCaseIds` と観測済みcase IDの差から導出します。unit自体のartifactがない場合は、CI側があらかじめ宣言したunit一覧との照合により `artifactMissing` とします。
+`CaseObservation` は少なくとも一つのattemptを必須にし、「実行結果なし」をnullableな結果で表しません。`attempts` は `startedAt` の非減少順とし、時刻が逆行する入力を境界で拒否します。同一時刻は許可します。欠損は `plannedCaseIds` と観測済みcase IDの差から導出します。unit自体のartifactがない場合は、CI側があらかじめ宣言したunit一覧との照合により `artifactMissing` とします。
 
 runnerのerror message、stack、trace、screenshotは集計用モデルへ複製せず、CI artifactまたはrunner reportへの参照だけを保存します。
 
