@@ -1,19 +1,25 @@
 import { catalogSearchScript, catalogStyles } from './catalog-assets.js';
 import { sortDocumentsForDisplay } from './documents.js';
 import type { Catalog, KnowledgeDocument, ManagedCase } from './model.js';
-
-const escapeHtml = (value: unknown): string => String(value)
-  .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+import { escapeHtml, renderAppHeader, renderHtmlDocument } from './html.js';
+import { renderDashboardNavigation } from './dashboard-navigation.js';
 const safeName = (value: string): string => encodeURIComponent(value);
 const compareText = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 const pretty = (value: unknown): string => escapeHtml(JSON.stringify(value, null, 2));
 
 type Section = 'catalog' | 'cases' | 'documents';
 
-const layout = (title: string, section: Section, rootPrefix: string, body: string): string => `<!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(title)} · Test Manager</title><link rel="stylesheet" href="${rootPrefix}assets/style.css"></head>
-<body><header class="app-header"><div class="header-inner"><a class="brand" href="${rootPrefix}index.html"><span class="brand-mark" aria-hidden="true">✓</span><span>Test Manager</span></a><nav class="segmented-nav" aria-label="カタログナビゲーション">${(['catalog', 'cases', 'documents'] as const).map((item) => `<a href="${rootPrefix}${item === 'catalog' ? 'index.html' : `${item}/index.html`}"${section === item ? ' aria-current="page"' : ''}>${item === 'catalog' ? 'ドメイン' : item === 'cases' ? 'ケース検索' : '仕様・判断'}</a>`).join('')}</nav><span class="header-spacer" aria-hidden="true"></span></div></header><main>${body}</main></body></html>\n`;
+const renderLayout = (title: string, section: Section, rootPrefix: string, body: string, integrated: boolean): string => {
+  const navigation = integrated
+    ? renderDashboardNavigation({ active: 'catalog', rootPrefix: `${rootPrefix}../` })
+    : `<nav class="segmented-nav" aria-label="カタログナビゲーション">${(['catalog', 'cases', 'documents'] as const).map((item) => `<a href="${rootPrefix}${item === 'catalog' ? 'index.html' : `${item}/index.html`}"${section === item ? ' aria-current="page"' : ''}>${item === 'catalog' ? 'ドメイン' : item === 'cases' ? 'ケース検索' : '仕様・判断'}</a>`).join('')}</nav>`;
+  return renderHtmlDocument({
+    title,
+    stylesheetHref: `${rootPrefix}assets/style.css`,
+    headerHtml: renderAppHeader({ homeHref: integrated ? `${rootPrefix}../index.html` : `${rootPrefix}index.html`, navigationHtml: navigation, spacer: true }),
+    bodyHtml: body,
+  });
+};
 
 const breadcrumbs = (document: KnowledgeDocument, byId: ReadonlyMap<string, KnowledgeDocument>): ReadonlyArray<KnowledgeDocument> => {
   const result = [document];
@@ -32,8 +38,9 @@ const markdown = (source: string): string => source.trim().split(/\r?\n/u).map((
   return heading ? `<h${heading[1]?.length}>${escapeHtml(heading[2])}</h${heading[1]?.length}>` : line ? `<p>${escapeHtml(line)}</p>` : '';
 }).join('');
 
-export const renderCatalogSite = (catalog: Catalog): ReadonlyMap<string, string> => {
+export const renderCatalogSite = (catalog: Catalog, integrated = false): ReadonlyMap<string, string> => {
   const files = new Map<string, string>();
+  const layout = (title: string, section: Section, rootPrefix: string, body: string): string => renderLayout(title, section, rootPrefix, body, integrated);
   const documents = sortDocumentsForDisplay(catalog.documents, catalog.rules);
   const cases = [...catalog.cases].sort((left, right) => compareText(left.id, right.id));
   const byId = new Map(documents.map((document) => [document.id, document]));
@@ -88,7 +95,7 @@ export const renderCatalogSite = (catalog: Catalog): ReadonlyMap<string, string>
     files.set(`cases/${safeName(item.id)}.html`, layout(item.title, 'cases', '../', `<h1>${escapeHtml(item.title)}</h1><p><code>${escapeHtml(item.id)}</code> · ${escapeHtml(item.source)} · ${escapeHtml(item.status)}</p><h2>所属・分類</h2><pre>${pretty(item.fields)}</pre><h2>条件・理由</h2><pre>${pretty(item.details)}</pre>${item.procedure ? `<h2>操作と期待結果</h2><pre>${pretty(item.procedure)}</pre>` : ''}${parameters ? `<h2>each入力表</h2><pre>${pretty(parameters)}</pre>` : ''}<h2>関連する仕様・判断</h2><ul>${refs.flatMap((id) => { const document = byId.get(id); return document ? [`<li>${linkDocument(document)}</li>`] : []; }).join('')}</ul><h2>ソース</h2><p><code>${escapeHtml(item.location.file)}:${item.location.line}</code></p><pre>${escapeHtml(item.snippet)}</pre>`));
   }
   const publicDocuments = documents.map(({ fieldLocations: _fieldLocations, ...document }) => document);
-  files.set('assets/style.css', catalogStyles);
+  files.set('assets/style.css', `${catalogStyles}\n[hidden]{display:none!important}\n`);
   files.set('assets/search.js', catalogSearchScript);
   files.set('catalog.json', `${JSON.stringify({ documents: publicDocuments, cases }, null, 2)}\n`);
   files.set('.test-manager-output', 'v1\n');

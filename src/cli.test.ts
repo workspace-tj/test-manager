@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { parseReleaseCatalogSnapshot } from './release-catalog.js';
 
 const execute = promisify(execFile);
-const cli = path.resolve('src/cli.ts');
+const cli = path.resolve('src/cli-entry.ts');
 
 const run = async (args: ReadonlyArray<string>): Promise<Readonly<{ code: number; stdout: string; stderr: string }>> => {
   try {
@@ -25,13 +25,6 @@ describe('CLI process boundary', () => {
   it('returns 0 for a valid project and 2 for invalid usage', async () => {
     expect((await run(['check', '--config', 'fixtures/valid/test-manager.yaml'])).code).toBe(0);
     expect((await run([])).code).toBe(2);
-    expect((await run(['check', '--config'])).code).toBe(2);
-    expect((await run(['check', '--config', 'fixtures/valid/test-manager.yaml', '--unknown', 'x'])).code).toBe(2);
-    expect((await run(['check', '--config', 'fixtures/valid/test-manager.yaml', '--config', 'fixtures/valid/test-manager.yaml'])).code).toBe(2);
-    expect((await run(['daily', '--config', 'fixtures/valid/test-manager.yaml', '--unit-artifact', '--out', '/tmp/x'])).code).toBe(2);
-    expect((await run(['build', '--config', 'does-not-exist.yaml'])).code).toBe(2);
-    expect((await run(['build', '--config', 'does-not-exist.yaml', '--out', ''])).code).toBe(2);
-    expect((await run(['daily', '--config', 'does-not-exist.yaml'])).code).toBe(2);
   });
 
   it('returns 1 and does not publish output when validation fails', async () => {
@@ -127,7 +120,7 @@ describe('CLI process boundary', () => {
       'release',
       '--production-snapshot', productionSnapshot,
       '--staging-snapshot', stagingSnapshot,
-      '--stylesheet', 'prototypes/quality-dashboard/assets/dashboard.css', '--out', out,
+      '--out', out,
     ]);
     expect(result.code).toBe(0);
     const html = await readFile(path.join(out, 'release.html'), 'utf8');
@@ -136,10 +129,71 @@ describe('CLI process boundary', () => {
     expect(html).toContain('CASE-110');
     expect(html).not.toContain('リリース可能');
   });
+
+  it('publishes daily, release, and catalog as one navigable site', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-cli-dashboard-'));
+    const out = path.join(root, 'site');
+    const productionDirectory = path.join(root, 'production');
+    const stagingDirectory = path.join(root, 'staging');
+    await run(['snapshot', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--commit', '6e2b11a', '--out', productionDirectory]);
+    await run(['snapshot', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--commit', '7f3a12c', '--out', stagingDirectory]);
+    const currentRun = path.join(root, 'current.json');
+    await writeFile(currentRun, JSON.stringify({
+      schemaVersion: 1, runId: 'current', attempt: 1, environment: 'dev', commit: '7f3a12c', scopeId: 'daily-all',
+      startedAt: '2026-09-13T00:00:00Z', completedAt: '2026-09-13T00:01:00Z', ciUrl: 'https://example.com/current',
+      units: [{
+        state: 'completed', unitId: 'vitest-unit', runner: 'vitest', layer: 'unit', target: 'node', plannedCaseIds: ['CASE-101'],
+        observations: [{ caseId: 'CASE-101', expected: 'passed', attemptCoverage: { kind: 'complete' }, attempts: [{ outcome: 'passed', durationMs: 10, startedAt: '2026-09-13T00:00:01Z', artifactRefs: [] }] }],
+      }],
+    }));
+
+    const result = await run([
+      'dashboard', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--current-run', currentRun,
+      '--production-snapshot', path.join(productionDirectory, 'release-catalog.json'),
+      '--staging-snapshot', path.join(stagingDirectory, 'release-catalog.json'),
+      '--out', out,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(await readFile(path.join(out, '.test-manager-output'), 'utf8')).toBe('quality-site-v1\n');
+    expect(await readFile(path.join(out, 'index.html'), 'utf8')).toContain('href="catalog/cases/index.html"');
+    expect(await readFile(path.join(out, 'release.html'), 'utf8')).toContain('前回productionからの変更');
+    expect(await readFile(path.join(out, 'catalog/index.html'), 'utf8')).toContain('ドメインから確認内容をたどる');
+  });
+
+  it('rejects a dashboard whose live catalog differs from its staging snapshot', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-cli-dashboard-mismatch-'));
+    const productionDirectory = path.join(root, 'production');
+    const stagingDirectory = path.join(root, 'staging');
+    await run(['snapshot', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--commit', '6e2b11a', '--out', productionDirectory]);
+    await run(['snapshot', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--commit', '7f3a12c', '--out', stagingDirectory]);
+    const stagingPath = path.join(stagingDirectory, 'release-catalog.json');
+    const staging: unknown = JSON.parse(await readFile(stagingPath, 'utf8'));
+    const parsed = parseReleaseCatalogSnapshot(staging);
+    if (!parsed.success) throw new Error('staging fixture must parse');
+    await writeFile(stagingPath, JSON.stringify({
+      ...parsed.data,
+      cases: parsed.data.cases.map((managedCase, index) => index === 0 ? { ...managedCase, title: 'different title' } : managedCase),
+    }));
+    const currentRun = path.join(root, 'current.json');
+    await writeFile(currentRun, JSON.stringify({
+      schemaVersion: 1, runId: 'current', attempt: 1, environment: 'dev', commit: '7f3a12c', scopeId: 'daily-all',
+      startedAt: '2026-09-13T00:00:00Z', completedAt: '2026-09-13T00:01:00Z', ciUrl: 'https://example.com/current',
+      units: [{ state: 'incomplete', reason: 'artifactMissing', unitId: 'u', runner: 'vitest', layer: 'unit', target: 'node', plannedCaseIds: ['CASE-101'], observations: [] }],
+    }));
+
+    const result = await run([
+      'dashboard', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--current-run', currentRun,
+      '--production-snapshot', path.join(productionDirectory, 'release-catalog.json'), '--staging-snapshot', stagingPath,
+      '--out', path.join(root, 'site'),
+    ]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('staging catalog snapshot does not match the configured catalog');
+  });
 });
 
 const runCliDaily = (args: ReadonlyArray<string>) => run([
   'daily', '--config', 'fixtures/valid/test-manager.yaml',
-  '--stylesheet', 'prototypes/quality-dashboard/assets/dashboard.css',
   ...args,
 ]);

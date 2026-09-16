@@ -5,6 +5,7 @@ import { checkProject } from './catalog.js';
 import { renderDailySite } from './daily-site.js';
 import { buildDailyView } from './daily-view.js';
 import { assembleTestRun } from './test-run-assembly.js';
+import { loadDashboardStyles } from './dashboard-styles.js';
 
 const fixtureRoot = path.resolve('fixtures/quality-dashboard');
 const readJson = async (name: string): Promise<unknown> => JSON.parse(await readFile(path.join(fixtureRoot, name), 'utf8'));
@@ -32,7 +33,7 @@ describe('production-like quality dashboard fixture', () => {
     expect(run.data.units[1]).toMatchObject({ state: 'incomplete', reason: 'runnerError', observations: [{ caseId: 'CASE-106' }, { caseId: 'CASE-107' }, { caseId: 'CASE-109' }] });
     expect(run.data.units[1]?.observations[0]?.attempts).toHaveLength(2);
 
-    const stylesheet = await readFile(path.resolve('prototypes/quality-dashboard/assets/dashboard.css'), 'utf8');
+    const stylesheet = await loadDashboardStyles();
     const files = renderDailySite(view.view, stylesheet);
     const html = files.get('index.html') ?? '';
     expect(html).toContain('stagingの日次実行');

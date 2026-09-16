@@ -1,6 +1,7 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import { relativeExistingContainedPath } from './contained-path.js';
 import type { Reporter, SerializedError, TestCase, TestModule, TestRunEndReason } from 'vitest/node';
 import { testRunUnitSchema } from './test-run.js';
 
@@ -35,7 +36,7 @@ const vitestUnitInputSchema = z.strictObject({
     z.strictObject({ state: z.literal('completed') }),
     z.strictObject({ state: z.literal('incomplete'), reason: z.enum(['cancelled', 'timedOut', 'runnerError']) }),
   ]),
-  tests: z.array(vitestCaseSchema).min(1),
+  tests: z.array(vitestCaseSchema),
 }).superRefine((unit, context) => {
   if (unit.completion.state === 'completed' && unit.tests.some((testCase) => testCase.state === 'pending')) {
     context.addIssue({ code: 'custom', path: ['tests'], message: 'completed Vitest units cannot contain pending cases' });
@@ -62,19 +63,13 @@ const metadataSchema = z.looseObject({ caseId: z.string().min(1) });
 const hasSyntaxError = (errors: ReadonlyArray<Readonly<Record<string, unknown>>> | undefined): boolean =>
   errors?.some((error) => error.__vitest_test_syntax_error__ === true || error.name === 'TestSyntaxError') ?? false;
 
-const isWithin = (root: string, candidate: string): boolean => {
-  const relative = path.relative(root, candidate);
-  return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
-};
-
 const artifactRefs = (testCase: VitestCaseSource, artifactRoot: string): ReadonlyArray<string> => testCase.artifacts()
   .flatMap((artifact) => artifact.attachments ?? [])
   .flatMap((attachment) => {
     if (attachment.path === undefined) return [];
-    const absoluteRoot = path.resolve(artifactRoot);
-    const absoluteAttachment = path.resolve(attachment.path);
-    if (!isWithin(absoluteRoot, absoluteAttachment)) throw new Error(`Vitest attachment is outside artifactRoot: ${attachment.path}`);
-    return [path.relative(absoluteRoot, absoluteAttachment).split(path.sep).join('/')];
+    const relative = relativeExistingContainedPath(artifactRoot, attachment.path);
+    if (!relative) throw new Error(`Vitest attachment is outside artifactRoot: ${attachment.path}`);
+    return [relative];
   });
 
 const pendingCase = (testCase: VitestCaseSource, artifactRoot: string): unknown => ({
@@ -155,13 +150,16 @@ export type TestManagerVitestReporterOptions = Readonly<{
 export class TestManagerVitestReporter implements Reporter {
   readonly #options: TestManagerVitestReporterOptions;
   readonly #tests = new Map<string, unknown>();
+  #writeSequence = 0;
+  #writeQueue: Promise<void> = Promise.resolve();
 
   constructor(options: TestManagerVitestReporterOptions) {
     this.#options = options;
   }
 
-  onTestRunStart(): void {
+  async onTestRunStart(): Promise<void> {
     this.#tests.clear();
+    await this.#writeSnapshot({ state: 'incomplete', reason: 'runnerError' });
   }
 
   onTestModuleCollected(testModule: TestModule): void {
@@ -172,8 +170,9 @@ export class TestManagerVitestReporter implements Reporter {
     this.#tests.set(testCase.id, pendingCase(testCase, this.#options.artifactRoot));
   }
 
-  onTestCaseResult(testCase: TestCase | VitestCaseSource): void {
+  async onTestCaseResult(testCase: TestCase | VitestCaseSource): Promise<void> {
     this.#tests.set(testCase.id, observedCase(testCase, this.#options.artifactRoot));
+    await this.#writeSnapshot({ state: 'incomplete', reason: 'runnerError' });
   }
 
   async onTestRunEnd(
@@ -188,20 +187,36 @@ export class TestManagerVitestReporter implements Reporter {
       : unhandledErrors.length > 0 || hasPending
         ? { state: 'incomplete' as const, reason: 'runnerError' as const }
         : { state: 'completed' as const };
+    await this.#writeSnapshot(completion);
+  }
+
+  async #writeSnapshot(completion: Readonly<{ state: 'completed' } | { state: 'incomplete'; reason: 'cancelled' | 'timedOut' | 'runnerError' }>): Promise<void> {
     const parsed = toVitestUnit({
       unitId: this.#options.unitId,
       layer: this.#options.layer,
       target: this.#options.target,
       completion,
-      tests,
+      tests: [...this.#tests.values()],
     }, this.#options.idPattern);
     if (!parsed.success) throw new Error(`Cannot create Vitest unit artifact: ${parsed.error.message}`);
-    await mkdir(path.dirname(this.#options.outputFile), { recursive: true });
     const { state, unitId, observations } = parsed.data;
     const artifact = state === 'completed'
       ? { state, unitId, observations }
       : { state, unitId, reason: parsed.data.reason, observations };
-    await writeFile(this.#options.outputFile, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
+    const temporaryFile = `${this.#options.outputFile}.${process.pid}.${this.#writeSequence}.tmp`;
+    this.#writeSequence += 1;
+    const write = async (): Promise<void> => {
+      try {
+        await mkdir(path.dirname(this.#options.outputFile), { recursive: true });
+        await writeFile(temporaryFile, `${JSON.stringify(artifact, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+        await rename(temporaryFile, this.#options.outputFile);
+      } finally {
+        await rm(temporaryFile, { force: true });
+      }
+    };
+    const queued = this.#writeQueue.then(write, write);
+    this.#writeQueue = queued.catch(() => undefined);
+    await queued;
   }
 }
 

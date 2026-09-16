@@ -1,15 +1,10 @@
 import { z } from 'zod';
 import { caseIdSchema } from './ids.js';
 import {
-  EnvironmentSchema,
-  ScopeIdSchema,
-  TimestampSchema,
   caseObservationSchema,
   testRunSchema,
 } from './test-run.js';
-
-const RunIdSchema = z.string().min(1).brand<'RunId'>();
-const CommitSchema = z.string().regex(/^[0-9a-f]{7,64}$/u).brand<'CommitSha'>();
+import { CommitSchema, EnvironmentSchema, RunIdSchema, ScopeIdSchema, TimestampSchema } from './run-identity.js';
 
 const plannedUnitSchema = (idPattern: RegExp) => z.strictObject({
   unitId: z.string().min(1),

@@ -1,7 +1,12 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { TestManagerVitestReporter, toVitestUnit } from './vitest-adapter.js';
+
+beforeAll(async () => {
+  await mkdir('/tmp/test-manager-artifacts/screenshots', { recursive: true });
+  await writeFile('/tmp/test-manager-artifacts/screenshots/failure.png', 'image', 'utf8');
+});
 
 describe('Vitest result adapter', () => {
   it('converts public Vitest result data without inventing retry attempts', () => {
@@ -95,7 +100,7 @@ describe('Vitest result adapter', () => {
       diagnostic: () => undefined, artifacts: () => [],
     };
     reporter.onTestCaseReady(pending);
-    reporter.onTestCaseResult({
+    await reporter.onTestCaseResult({
       ...pending,
       result: () => ({ state: 'passed' as const, errors: undefined }),
       diagnostic: () => ({ duration: 18, startTime: 1_789_257_601_000, retryCount: 1, flaky: true }),
@@ -111,6 +116,57 @@ describe('Vitest result adapter', () => {
     expect(artifact).not.toHaveProperty('plannedCaseIds');
   });
 
+  it('persists acquired results as runnerError before the run-end callback', async () => {
+    const outputFile = path.resolve('/tmp', `test-manager-vitest-interrupted-${process.pid}.json`);
+    const reporter = new TestManagerVitestReporter({
+      outputFile, artifactRoot: '/tmp', unitId: 'vitest-unit-node', layer: 'unit', target: 'node', idPattern: /^(?:CASE-[0-9]{3})$/u,
+    });
+    const pending = {
+      id: 'test-1', options: { mode: 'run' as const, fails: false },
+      meta: () => ({ caseId: 'CASE-001' }), result: () => ({ state: 'pending' as const }),
+      diagnostic: () => undefined, artifacts: () => [],
+    };
+
+    await reporter.onTestRunStart();
+    reporter.onTestCaseReady(pending);
+    await reporter.onTestCaseResult({
+      ...pending,
+      result: () => ({ state: 'passed' as const, errors: undefined }),
+      diagnostic: () => ({ duration: 18, startTime: 1_789_257_601_000, retryCount: 0, flaky: false }),
+    });
+
+    const artifact: unknown = JSON.parse(await readFile(outputFile, 'utf8'));
+    expect(artifact).toMatchObject({
+      state: 'incomplete', reason: 'runnerError', unitId: 'vitest-unit-node',
+      observations: [{ caseId: 'CASE-001', attempts: [{ outcome: 'passed' }] }],
+    });
+  });
+
+  it('does not let an older snapshot overwrite a newer reporter event', async () => {
+    const outputFile = path.resolve('/tmp', `test-manager-vitest-ordered-${process.pid}.json`);
+    const reporter = new TestManagerVitestReporter({
+      outputFile, artifactRoot: '/tmp', unitId: 'vitest-unit-node', layer: 'unit', target: 'node', idPattern: /^CASE-[0-9]+$/u,
+    });
+    for (let index = 0; index < 2_000; index += 1) {
+      reporter.onTestCaseReady({
+        id: `test-${index}`, options: { mode: 'run', fails: false },
+        meta: () => ({ caseId: `CASE-${index}` }), result: () => ({ state: 'pending' }),
+        diagnostic: () => undefined, artifacts: () => [],
+      });
+    }
+
+    const olderWrite = reporter.onTestCaseResult({
+      id: 'test-0', options: { mode: 'run', fails: false },
+      meta: () => ({ caseId: 'CASE-0' }), result: () => ({ state: 'passed', errors: undefined }),
+      diagnostic: () => ({ duration: 18, startTime: 1_789_257_601_000, retryCount: 0, flaky: false }), artifacts: () => [],
+    });
+    const newerWrite = reporter.onTestRunStart();
+    await Promise.all([olderWrite, newerWrite]);
+
+    const artifact: unknown = JSON.parse(await readFile(outputFile, 'utf8'));
+    expect(artifact).toMatchObject({ state: 'incomplete', reason: 'runnerError', observations: [] });
+  });
+
   it('stores only relative attachment references inside artifactRoot', async () => {
     const outputFile = path.resolve('/tmp', `test-manager-vitest-attachment-${process.pid}.json`);
     const reporter = new TestManagerVitestReporter({
@@ -124,7 +180,7 @@ describe('Vitest result adapter', () => {
       artifacts: () => [{ attachments: [{ path: '/tmp/test-manager-artifacts/screenshots/failure.png' }] }],
     };
 
-    reporter.onTestCaseResult({
+    await reporter.onTestCaseResult({
       ...testCase,
       result: () => ({ state: 'passed' as const, errors: undefined }),
       diagnostic: () => ({ duration: 12, startTime: 1_789_257_601_000, retryCount: 0, flaky: false }),

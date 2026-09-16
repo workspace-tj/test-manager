@@ -24,7 +24,7 @@ describe('project catalog', () => {
     await writeFile(path.join(incompatibleZod, 'index.js'), 'export {};\n', 'utf8');
     try {
       const output = path.join(consumer, 'site');
-      await executeFile(process.execPath, [path.resolve('dist/cli.js'), 'build', '--config', path.join(fixture, 'test-manager.yaml'), '--out', output], { cwd: consumer });
+      await executeFile(process.execPath, [path.resolve('dist/cli-entry.js'), 'build', '--config', path.join(fixture, 'test-manager.yaml'), '--out', output], { cwd: consumer });
       expect(await readdir(consumer)).toEqual(['node_modules', 'site']);
       expect(await readdir(output)).toContain('index.html');
     } finally {

@@ -32,7 +32,7 @@ export type DailyView = Readonly<{
   run: TestRun;
   comparison: Readonly<
     | { state: 'available'; previousRunId: TestRun['runId'] }
-    | { state: 'unavailable'; reason: 'noPrevious' | 'differentEnvironment' | 'differentScope' }
+    | { state: 'unavailable'; reason: 'noPrevious' | 'differentEnvironment' | 'differentScope' | 'previousIsNewer' }
   >;
   changes: ReadonlyArray<DailyChange>;
   domains: ReadonlyArray<DailyDomain>;
@@ -58,6 +58,7 @@ const comparisonFor = (current: TestRun, previous: TestRun | undefined): DailyVi
   if (!previous) return { state: 'unavailable', reason: 'noPrevious' };
   if (previous.environment !== current.environment) return { state: 'unavailable', reason: 'differentEnvironment' };
   if (previous.scopeId !== current.scopeId) return { state: 'unavailable', reason: 'differentScope' };
+  if (Date.parse(previous.completedAt) > Date.parse(current.completedAt)) return { state: 'unavailable', reason: 'previousIsNewer' };
   return { state: 'available', previousRunId: previous.runId };
 };
 
@@ -78,19 +79,21 @@ export const buildDailyView = (catalog: Catalog, current: TestRun, previous?: Te
   if (problems.length > 0) return { ok: false, problems };
 
   const documentsById = new Map(catalog.documents.map((document) => [document.id, document]));
-  const belongsToRule = catalog.rules.case.fields.belongsTo;
-  const membershipKinds = belongsToRule?.type === 'reference' ? new Set(belongsToRule.targetKinds) : new Set<string>();
-  const domains = sortDocumentsForDisplay(catalog.documents, catalog.rules)
-    .filter((document) => membershipKinds.has(document.kind) && document.parent === undefined);
-  const currentStatuses = caseStatuses(current);
-  const comparison = comparisonFor(current, previous);
-  const previousStatuses = comparison.state === 'available' && previous ? caseStatuses(previous) : new Map<CaseId, CaseStatus>();
-
   const domainFor = (managedCase: ManagedCase): KnowledgeDocument => {
     const membership = documentsById.get(managedCase.fields.belongsTo);
     if (!membership) throw new Error(`catalog invariant violated: membership ${managedCase.fields.belongsTo} is missing`);
     return rootDocument(membership, documentsById);
   };
+  const belongsTo = catalog.rules.case.fields.belongsTo;
+  const membershipKinds = belongsTo?.type === 'reference' ? new Set(belongsTo.targetKinds) : new Set<string>();
+  const domainIds = new Set(catalog.documents
+    .filter((document) => membershipKinds.has(document.kind))
+    .map((document) => rootDocument(document, documentsById).id));
+  const domains = sortDocumentsForDisplay(catalog.documents, catalog.rules)
+    .filter((document) => domainIds.has(document.id));
+  const currentStatuses = caseStatuses(current);
+  const comparison = comparisonFor(current, previous);
+  const previousStatuses = comparison.state === 'available' && previous ? caseStatuses(previous) : new Map<CaseId, CaseStatus>();
 
   const changes: DailyChange[] = [];
   for (const caseId of currentPlanned) {

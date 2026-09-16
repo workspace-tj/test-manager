@@ -1,6 +1,6 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { TestManagerPlaywrightReporter, toPlaywrightUnitArtifact } from './playwright-adapter.js';
 
 const testCase = {
@@ -13,6 +13,11 @@ const result = {
   status: 'passed', retry: 1, duration: 34, startTime: new Date('2026-09-13T00:00:01Z'),
   attachments: [{ name: 'trace', path: 'artifacts/trace.zip' }, { name: 'stdout' }],
 } as const;
+
+beforeAll(async () => {
+  await mkdir('/tmp/artifacts', { recursive: true });
+  await writeFile('/tmp/artifacts/trace.zip', 'trace', 'utf8');
+});
 
 describe('Playwright result adapter', () => {
   it('normalizes expected/actual status, retries, timing, and attachment references', () => {
