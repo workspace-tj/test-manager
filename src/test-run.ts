@@ -17,6 +17,18 @@ export const caseObservationSchema = (idPattern: RegExp) => z.strictObject({
     z.strictObject({ kind: z.literal('finalOnly'), retryCount: z.number().int().nonnegative(), flaky: z.boolean() }),
   ]),
   attempts: z.tuple([AttemptSchema]).rest(AttemptSchema),
+}).superRefine((observation, context) => {
+  for (let index = 1; index < observation.attempts.length; index += 1) {
+    const previous = observation.attempts[index - 1];
+    const current = observation.attempts[index];
+    if (previous && current && Date.parse(current.startedAt) < Date.parse(previous.startedAt)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['attempts', index, 'startedAt'],
+        message: 'attempt start times must not move backwards',
+      });
+    }
+  }
 });
 
 const completedUnitSchema = (idPattern: RegExp) => z.strictObject({

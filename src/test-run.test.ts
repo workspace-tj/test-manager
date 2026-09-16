@@ -64,6 +64,34 @@ describe('normalized test run', () => {
     expect(result.success).toBe(true);
   });
 
+  it('rejects attempts whose start times move backwards while allowing equal timestamps', () => {
+    const baseAttempt = completedUnit.observations[0].attempts[0];
+    const parseAttempts = (startedAt: ReadonlyArray<string>) => parseTestRun({
+      ...input,
+      units: [{
+        ...completedUnit,
+        observations: [{
+          ...completedUnit.observations[0],
+          attempts: startedAt.map((timestamp) => ({ ...baseAttempt, startedAt: timestamp })),
+        }, completedUnit.observations[1]],
+      }],
+    }, /^(?:CASE-[0-9]{3})$/u);
+
+    const reversed = parseAttempts([
+      '2026-09-13T00:00:02Z',
+      '2026-09-13T00:00:01Z',
+    ]);
+    expect(reversed.success).toBe(false);
+    if (reversed.success) return;
+    expect(reversed.error.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: ['units', 0, 'observations', 0, 'attempts', 1, 'startedAt'] }),
+    ]));
+    expect(parseAttempts([
+      '2026-09-13T00:00:01Z',
+      '2026-09-13T00:00:01Z',
+    ]).success).toBe(true);
+  });
+
   it('rejects duplicate plans and observations outside the discovered plan', () => {
     const result = parseTestRun({
       ...input,
