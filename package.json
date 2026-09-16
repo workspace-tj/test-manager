@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm build && vitest run",
+    "test": "pnpm build && vitest run && pnpm test:e2e",
+    "test:e2e": "playwright test",
     "test:watch": "vitest"
   },
   "dependencies": {
