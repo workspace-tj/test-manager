@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { relativeExistingContainedPath } from './contained-path.js';
@@ -36,7 +36,7 @@ const vitestUnitInputSchema = z.strictObject({
     z.strictObject({ state: z.literal('completed') }),
     z.strictObject({ state: z.literal('incomplete'), reason: z.enum(['cancelled', 'timedOut', 'runnerError']) }),
   ]),
-  tests: z.array(vitestCaseSchema).min(1),
+  tests: z.array(vitestCaseSchema),
 }).superRefine((unit, context) => {
   if (unit.completion.state === 'completed' && unit.tests.some((testCase) => testCase.state === 'pending')) {
     context.addIssue({ code: 'custom', path: ['tests'], message: 'completed Vitest units cannot contain pending cases' });
@@ -150,13 +150,16 @@ export type TestManagerVitestReporterOptions = Readonly<{
 export class TestManagerVitestReporter implements Reporter {
   readonly #options: TestManagerVitestReporterOptions;
   readonly #tests = new Map<string, unknown>();
+  #writeSequence = 0;
+  #writeQueue: Promise<void> = Promise.resolve();
 
   constructor(options: TestManagerVitestReporterOptions) {
     this.#options = options;
   }
 
-  onTestRunStart(): void {
+  async onTestRunStart(): Promise<void> {
     this.#tests.clear();
+    await this.#writeSnapshot({ state: 'incomplete', reason: 'runnerError' });
   }
 
   onTestModuleCollected(testModule: TestModule): void {
@@ -167,8 +170,9 @@ export class TestManagerVitestReporter implements Reporter {
     this.#tests.set(testCase.id, pendingCase(testCase, this.#options.artifactRoot));
   }
 
-  onTestCaseResult(testCase: TestCase | VitestCaseSource): void {
+  async onTestCaseResult(testCase: TestCase | VitestCaseSource): Promise<void> {
     this.#tests.set(testCase.id, observedCase(testCase, this.#options.artifactRoot));
+    await this.#writeSnapshot({ state: 'incomplete', reason: 'runnerError' });
   }
 
   async onTestRunEnd(
@@ -183,12 +187,16 @@ export class TestManagerVitestReporter implements Reporter {
       : unhandledErrors.length > 0 || hasPending
         ? { state: 'incomplete' as const, reason: 'runnerError' as const }
         : { state: 'completed' as const };
+    await this.#writeSnapshot(completion);
+  }
+
+  async #writeSnapshot(completion: Readonly<{ state: 'completed' } | { state: 'incomplete'; reason: 'cancelled' | 'timedOut' | 'runnerError' }>): Promise<void> {
     const parsed = toVitestUnit({
       unitId: this.#options.unitId,
       layer: this.#options.layer,
       target: this.#options.target,
       completion,
-      tests,
+      tests: [...this.#tests.values()],
     }, this.#options.idPattern);
     if (!parsed.success) throw new Error(`Cannot create Vitest unit artifact: ${parsed.error.message}`);
     await mkdir(path.dirname(this.#options.outputFile), { recursive: true });
@@ -196,7 +204,19 @@ export class TestManagerVitestReporter implements Reporter {
     const artifact = state === 'completed'
       ? { state, unitId, observations }
       : { state, unitId, reason: parsed.data.reason, observations };
-    await writeFile(this.#options.outputFile, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
+    const temporaryFile = `${this.#options.outputFile}.${process.pid}.${this.#writeSequence}.tmp`;
+    this.#writeSequence += 1;
+    const write = async (): Promise<void> => {
+      try {
+        await writeFile(temporaryFile, `${JSON.stringify(artifact, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+        await rename(temporaryFile, this.#options.outputFile);
+      } finally {
+        await rm(temporaryFile, { force: true });
+      }
+    };
+    const queued = this.#writeQueue.then(write, write);
+    this.#writeQueue = queued.catch(() => undefined);
+    await queued;
   }
 }
 
