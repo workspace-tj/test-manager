@@ -199,7 +199,6 @@ export class TestManagerVitestReporter implements Reporter {
       tests: [...this.#tests.values()],
     }, this.#options.idPattern);
     if (!parsed.success) throw new Error(`Cannot create Vitest unit artifact: ${parsed.error.message}`);
-    await mkdir(path.dirname(this.#options.outputFile), { recursive: true });
     const { state, unitId, observations } = parsed.data;
     const artifact = state === 'completed'
       ? { state, unitId, observations }
@@ -208,6 +207,7 @@ export class TestManagerVitestReporter implements Reporter {
     this.#writeSequence += 1;
     const write = async (): Promise<void> => {
       try {
+        await mkdir(path.dirname(this.#options.outputFile), { recursive: true });
         await writeFile(temporaryFile, `${JSON.stringify(artifact, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
         await rename(temporaryFile, this.#options.outputFile);
       } finally {
