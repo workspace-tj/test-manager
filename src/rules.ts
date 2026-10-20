@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { diagnostic } from './diagnostics.js';
-import { caseSources, sourceKinds, type Diagnostic, type FieldRule, type ProjectRules } from './model.js';
+import { caseSources, type Diagnostic, type FieldRule, type ProjectRules } from './model.js';
 import { parseStrictYaml, yamlPathLine } from './yaml.js';
 
 const KindRuleSchema = z.object({
@@ -43,9 +43,9 @@ const RulesShape = z.object({
   }, 'must be a valid regular expression'),
   discovery: z.object({
     documents: z.array(z.string().min(1)).min(1),
-    manualCases: z.array(z.string().min(1)),
     sources: z.array(z.object({
-      kind: z.enum(sourceKinds),
+      kind: z.enum(caseSources),
+      layer: z.string().min(1),
       paths: z.array(z.string().min(1)).min(1),
     }).strict()),
   }).strict(),
@@ -57,7 +57,7 @@ const RulesShape = z.object({
 }).strict();
 
 const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z.RefinementCtx): void => {
-  const reservedFields = new Set(['id', 'title', 'steps', 'source', 'status', 'details', 'procedure', 'parameters', 'location', 'snippet', 'owner']);
+  const reservedFields = new Set(['id', 'title', 'steps', 'source', 'status', 'details', 'procedure', 'parameters', 'location', 'snippet', 'owner', 'layer']);
   for (const name of Object.keys(rules.case.fields)) if (reservedFields.has(name)) context.addIssue({ code: 'custom', path: ['case', 'fields', name], message: `${name} is reserved by the case model` });
   const belongsTo = rules.case.fields.belongsTo;
   if (!belongsTo || !belongsTo.required || belongsTo.type !== 'reference') {
@@ -70,6 +70,9 @@ const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z
   for (const [name, field] of Object.entries(rules.case.fields)) {
     if (field.requiredWhen?.field === 'source') {
       if (!(caseSources as ReadonlyArray<unknown>).includes(field.requiredWhen.equals)) context.addIssue({ code: 'custom', path: ['case', 'fields', name, 'requiredWhen', 'equals'], message: `source must be one of ${caseSources.join(', ')}` });
+    } else if (field.requiredWhen?.field === 'layer') {
+      const layers = [...new Set(rules.discovery.sources.map((source) => source.layer))];
+      if (!(layers as ReadonlyArray<unknown>).includes(field.requiredWhen.equals)) context.addIssue({ code: 'custom', path: ['case', 'fields', name, 'requiredWhen', 'equals'], message: `layer must be one of ${layers.join(', ')}` });
     } else if (field.requiredWhen) {
       const conditionField = rules.case.fields[field.requiredWhen.field];
       if (conditionField === undefined) {
@@ -146,6 +149,10 @@ export const loadRules = async (
   }
   const parsed = parseStrictYaml(source, absolute);
   if (parsed.diagnostics.length > 0) return { diagnostics: parsed.diagnostics };
+  const discovery = typeof parsed.value === 'object' && parsed.value !== null ? (parsed.value as { discovery?: unknown }).discovery : undefined;
+  if (typeof discovery === 'object' && discovery !== null && 'manualCases' in discovery) {
+    return { diagnostics: [diagnostic('TM003', absolute, 'discovery.manualCases', 'manualCases was removed; declare manual cases in discovery.sources with kind: manual and a layer', yamlPathLine(source, ['discovery', 'manualCases']))] };
+  }
   const result = RulesSchema.safeParse(parsed.value);
   if (!result.success) {
     return { diagnostics: result.error.issues.map((issue) => {

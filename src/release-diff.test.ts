@@ -71,6 +71,21 @@ describe('release catalog difference', () => {
     })).toBe(false);
   });
 
+  it('carries case layers in schemaVersion 2 snapshots and treats a layer move as a change', async () => {
+    const checked = await checkProject(path.resolve('fixtures/quality-dashboard/test-manager.yaml'));
+    if (!checked.ok) throw new Error('fixture catalog must be valid');
+    const production = createReleaseCatalogSnapshot(checked.catalog, '6e2b11a');
+    expect(production.schemaVersion).toBe(2);
+    expect(production.cases.every((item) => item.layer.length > 0)).toBe(true);
+    const legacy = parseReleaseCatalogSnapshot({ ...production, schemaVersion: 1 });
+    expect(legacy.success).toBe(false);
+    expect(legacy.error?.message).toContain('regenerate');
+    const moved = production.cases[0];
+    if (!moved) throw new Error('fixture must contain cases');
+    const staging = { ...createReleaseCatalogSnapshot(checked.catalog, '7f3a12c'), cases: production.cases.map((item) => item.id === moved.id ? { ...item, layer: 'integration' } : item) };
+    expect(sameReleaseCatalogContent(production, staging)).toBe(false);
+  });
+
   it('rejects invalid or identical release commits', async () => {
     const checked = await checkProject(path.resolve('fixtures/quality-dashboard/test-manager.yaml'));
     if (!checked.ok) throw new Error('fixture catalog must be valid');

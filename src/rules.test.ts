@@ -58,10 +58,10 @@ describe('project-defined vocabulary', () => {
       device: { required: false as const, placement: 'classification' as const, requiredWhen: { field: 'source', equals: 'playwright' }, type: 'text' as const },
     };
     const documents = [{ id: documentIdSchema(/.*/u).parse('area'), kind: 'area', title: 'Area', body: '', location: { file: 'area.md', line: 1, column: 1 } }];
-    const diagnostics = validateCaseFields({ belongsTo: 'area' }, rules, documents, 'case.ts', 'playwright');
+    const diagnostics = validateCaseFields({ belongsTo: 'area' }, rules, documents, 'case.ts', { source: 'playwright', layer: 'e2e' });
     expect(diagnostics.map((item) => item.code)).toEqual(['TM121']);
     expect(diagnostics[0]?.reason).toContain('required when source');
-    expect(validateCaseFields({ belongsTo: 'area' }, rules, documents, 'case.ts', 'vitest')).toEqual([]);
+    expect(validateCaseFields({ belongsTo: 'area' }, rules, documents, 'case.ts', { source: 'vitest', layer: 'unit' })).toEqual([]);
   });
 
   it('distinguishes missing references from disallowed target kinds', () => {
@@ -69,6 +69,33 @@ describe('project-defined vocabulary', () => {
     const documents = [{ id: documentIdSchema(/.*/u).parse('spec'), kind: 'specification', title: 'Spec', body: '', location: { file: 'spec.md', line: 1, column: 1 } }];
     expect(validateCaseFields({ belongsTo: 'missing' }, rule, documents, 'case.ts').map((item) => item.code)).toEqual(['TM126']);
     expect(validateCaseFields({ belongsTo: 'spec' }, rule, documents, 'case.ts').map((item) => item.code)).toEqual(['TM127']);
+  });
+
+  it('rejects requiredWhen layer values that no discovery source defines', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-rule-layer-condition-'));
+    const source = await readFile(path.resolve('fixtures/valid/test-manager.yaml'), 'utf8');
+    await writeFile(path.join(root, 'test-manager.yaml'), source.replace('required: false, placement: classification, type: reference-list', 'required: false, placement: classification, requiredWhen: { field: layer, equals: integration }, type: reference-list'), 'utf8');
+    const result = await loadRules(path.join(root, 'test-manager.yaml'));
+    expect(result.rules).toBeUndefined();
+    expect(result.diagnostics.some((item) => item.subject.endsWith('requiredWhen.equals') && item.reason.includes('e2e, unit, ui'))).toBe(true);
+    await writeFile(path.join(root, 'numeric.yaml'), source.replace('layer: unit', 'layer: "1"').replace('required: false, placement: classification, type: reference-list', 'required: false, placement: classification, requiredWhen: { field: layer, equals: 1 }, type: reference-list'), 'utf8');
+    const numeric = await loadRules(path.join(root, 'numeric.yaml'));
+    expect(numeric.rules).toBeUndefined();
+    expect(numeric.diagnostics.some((item) => item.subject.endsWith('requiredWhen.equals'))).toBe(true);
+  });
+
+  it('requires a layer on every discovery source and explains the removed manualCases key', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-rule-layer-'));
+    const source = await readFile(path.resolve('fixtures/valid/test-manager.yaml'), 'utf8');
+    await writeFile(path.join(root, 'missing-layer.yaml'), source.replace('      layer: unit\n', ''), 'utf8');
+    const missing = await loadRules(path.join(root, 'missing-layer.yaml'));
+    expect(missing.rules).toBeUndefined();
+    expect(missing.diagnostics.some((item) => item.subject.endsWith('layer'))).toBe(true);
+    await writeFile(path.join(root, 'legacy.yaml'), source.replace('  sources:\n', '  manualCases: ["knowledge/**/*.manual.yaml"]\n  sources:\n'), 'utf8');
+    const legacy = await loadRules(path.join(root, 'legacy.yaml'));
+    expect(legacy.rules).toBeUndefined();
+    expect(legacy.diagnostics).toEqual([expect.objectContaining({ code: 'TM003', subject: 'discovery.manualCases' })]);
+    expect(legacy.diagnostics[0]?.reason).toContain('kind: manual');
   });
 
   it('rejects requiredWhen source values that are not case sources', async () => {

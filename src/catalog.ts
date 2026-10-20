@@ -34,14 +34,12 @@ export const checkProject = async (configPath: string): Promise<CheckResult> => 
   const diagnostics: Diagnostic[] = [];
   const configFile = path.relative(projectRoot, absoluteConfig);
   const documentDiscovery = await discoverConfigured(rules.discovery.documents, projectRoot, configFile);
-  const manualDiscovery = await discoverConfigured(rules.discovery.manualCases, projectRoot, configFile);
   const documentFiles = documentDiscovery.files;
-  const manualFiles = manualDiscovery.files;
   const sourceMatches = await Promise.all(rules.discovery.sources.map(async (source) => ({ source, ...(await discoverConfigured(source.paths, projectRoot, configFile)) })));
-  diagnostics.push(...documentDiscovery.diagnostics, ...manualDiscovery.diagnostics, ...sourceMatches.flatMap((match) => match.diagnostics));
+  diagnostics.push(...documentDiscovery.diagnostics, ...sourceMatches.flatMap((match) => match.diagnostics));
 
   const ownership = new Map<string, string>();
-  for (const group of [{ name: 'documents', files: documentFiles }, { name: 'manualCases', files: manualFiles }, ...sourceMatches.map(({ source, files }) => ({ name: source.kind, files }))]) {
+  for (const group of [{ name: 'documents', files: documentFiles }, ...sourceMatches.map(({ source, files }, index) => ({ name: `sources[${index}] (${source.kind}/${source.layer})`, files }))]) {
     for (const file of group.files) {
       const previous = ownership.get(file);
       if (previous) diagnostics.push(diagnostic('TM010', path.relative(projectRoot, file), 'discovery', `file matches both ${previous} and ${group.name}`));
@@ -57,8 +55,11 @@ export const checkProject = async (configPath: string): Promise<CheckResult> => 
     ...validateDocumentDisplayOrder(documents, rules, configFile),
   );
 
-  const manualResults = await Promise.all(manualFiles.map((file) => readManualCase(file, projectRoot, rules, documents)));
-  const sourceResults = await Promise.all(sourceMatches.flatMap(({ source, files }) => files.map((file) => readTestSource(file, projectRoot, source.kind, rules, documents))));
+  const manualResults = await Promise.all(sourceMatches.flatMap(({ source, files }) => source.kind === 'manual' ? files.map((file) => readManualCase(file, projectRoot, source.layer, rules, documents)) : []));
+  const sourceResults = await Promise.all(sourceMatches.flatMap(({ source, files }) => {
+    const kind = source.kind;
+    return kind === 'manual' ? [] : files.map((file) => readTestSource(file, projectRoot, kind, source.layer, rules, documents));
+  }));
   const cases: ManagedCase[] = [
     ...manualResults.flatMap((result) => result.managedCase ? [result.managedCase] : []),
     ...sourceResults.flatMap((result) => result.cases),
