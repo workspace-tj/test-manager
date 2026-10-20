@@ -47,6 +47,14 @@ describe('CLI argument grammar', () => {
     expect(parseCliArguments(['schema', '--out', 'x'])).toBeUndefined();
   });
 
+  it('accepts a history directory and window for daily pages only with the directory', () => {
+    expect(parseCliArguments(['daily', '--config', 'c.yaml', '--out', 'site', '--current-run', 'run.json', '--history-dir', 'runs', '--history-window', '30'])).toEqual({
+      command: 'daily', config: 'c.yaml', out: 'site', current: { type: 'run', path: 'run.json' }, historyDir: 'runs', historyWindow: 30,
+    });
+    expect(parseCliArguments(['daily', '--config', 'c.yaml', '--out', 'site', '--current-run', 'run.json', '--history-window', '30'])).toBeUndefined();
+    expect(parseCliArguments(['daily', '--config', 'c.yaml', '--out', 'site', '--current-run', 'run.json', '--history-dir', 'runs', '--history-window', '0'])).toBeUndefined();
+  });
+
   it.each([
     ['unknown command', ['unknown']],
     ['missing flag value', ['check', '--config']],

@@ -4,12 +4,13 @@ export const cliUsage = `Usage:
   test-manager check --config <path>
   test-manager build --config <path> --out <path>
   test-manager snapshot --config <path> --commit <sha> --out <path>
-  test-manager daily --config <path> [--stylesheet <path>] --out <path> --current-run <path> [--previous-run <path>]
-  test-manager daily --config <path> [--stylesheet <path>] --out <path> --manifest <path> --completed-at <timestamp> [--unit-artifact <path> ...] [--previous-run <path>]
+  test-manager daily --config <path> [--stylesheet <path>] --out <path> --current-run <path> [--previous-run <path>] [--history-dir <path> [--history-window <n>]]
+  test-manager daily --config <path> [--stylesheet <path>] --out <path> --manifest <path> --completed-at <timestamp> [--unit-artifact <path> ...] [--previous-run <path>] [--history-dir <path> [--history-window <n>]]
   test-manager release --production-snapshot <path> --staging-snapshot <path> [--stylesheet <path>] --out <path> [--latest-staging-run <path>] [--manual-results <path> ...] [--manual-snapshot <path> ...]
-  test-manager dashboard --config <path> --current-run <path> [--previous-run <path>] --production-snapshot <path> --staging-snapshot <path> [--latest-staging-run <path>] [--manual-results <path> ...] [--manual-snapshot <path> ...] [--stylesheet <path>] --out <path>`;
+  test-manager dashboard --config <path> --current-run <path> [--previous-run <path>] [--history-dir <path> [--history-window <n>]] --production-snapshot <path> --staging-snapshot <path> [--latest-staging-run <path>] [--manual-results <path> ...] [--manual-snapshot <path> ...] [--stylesheet <path>] --out <path>`;
 
 type CommonSiteOptions = Readonly<{ out: string; stylesheet?: string }>;
+type HistoryOptions = Readonly<{ historyDir?: string; historyWindow?: number }>;
 type ManualEvidenceOptions = Readonly<{ manualResults: ReadonlyArray<string>; manualSnapshots: ReadonlyArray<string> }>;
 
 export type CliArguments =
@@ -18,18 +19,18 @@ export type CliArguments =
   | Readonly<{ command: 'check'; config: string }>
   | Readonly<{ command: 'build'; config: string; out: string }>
   | Readonly<{ command: 'snapshot'; config: string; commit: string; out: string }>
-  | (Readonly<{ command: 'daily'; config: string; previousRun?: string; current: Readonly<{ type: 'run'; path: string }> | Readonly<{ type: 'artifacts'; manifest: string; completedAt: string; unitArtifacts: ReadonlyArray<string> }> }> & CommonSiteOptions)
+  | (Readonly<{ command: 'daily'; config: string; previousRun?: string; current: Readonly<{ type: 'run'; path: string }> | Readonly<{ type: 'artifacts'; manifest: string; completedAt: string; unitArtifacts: ReadonlyArray<string> }> }> & CommonSiteOptions & HistoryOptions)
   | (Readonly<{ command: 'release'; productionSnapshot: string; stagingSnapshot: string; latestStagingRun?: string }> & CommonSiteOptions & ManualEvidenceOptions)
-  | (Readonly<{ command: 'dashboard'; config: string; currentRun: string; previousRun?: string; productionSnapshot: string; stagingSnapshot: string; latestStagingRun?: string }> & CommonSiteOptions & ManualEvidenceOptions);
+  | (Readonly<{ command: 'dashboard'; config: string; currentRun: string; previousRun?: string; productionSnapshot: string; stagingSnapshot: string; latestStagingRun?: string }> & CommonSiteOptions & ManualEvidenceOptions & HistoryOptions);
 
 type Command = Exclude<CliArguments['command'], 'init' | 'schema'>;
 const allowedFlags: Readonly<Record<Command, ReadonlySet<string>>> = {
   check: new Set(['--config']),
   build: new Set(['--config', '--out']),
   snapshot: new Set(['--config', '--commit', '--out']),
-  daily: new Set(['--config', '--out', '--stylesheet', '--current-run', '--previous-run', '--manifest', '--completed-at', '--unit-artifact']),
+  daily: new Set(['--config', '--out', '--stylesheet', '--current-run', '--previous-run', '--manifest', '--completed-at', '--unit-artifact', '--history-dir', '--history-window']),
   release: new Set(['--production-snapshot', '--staging-snapshot', '--latest-staging-run', '--manual-results', '--manual-snapshot', '--stylesheet', '--out']),
-  dashboard: new Set(['--config', '--current-run', '--previous-run', '--production-snapshot', '--staging-snapshot', '--latest-staging-run', '--manual-results', '--manual-snapshot', '--stylesheet', '--out']),
+  dashboard: new Set(['--config', '--current-run', '--previous-run', '--history-dir', '--history-window', '--production-snapshot', '--staging-snapshot', '--latest-staging-run', '--manual-results', '--manual-snapshot', '--stylesheet', '--out']),
 };
 
 const repeatableFlags: ReadonlySet<string> = new Set(['--unit-artifact', '--manual-results', '--manual-snapshot']);
@@ -69,6 +70,11 @@ export const parseCliArguments = (args: ReadonlyArray<string>): CliArguments | u
   if (!flags) return undefined;
   const value = (flag: string): string | undefined => flags.get(flag)?.[0];
   const config = value('--config');
+  const historyDir = value('--history-dir');
+  const rawWindow = value('--history-window');
+  const historyWindow = rawWindow === undefined ? undefined : /^[1-9][0-9]{0,3}$/u.test(rawWindow) ? Number(rawWindow) : Number.NaN;
+  if (Number.isNaN(historyWindow) || (historyWindow !== undefined && !historyDir)) return undefined;
+  const history = { ...(historyDir ? { historyDir } : {}), ...(historyWindow ? { historyWindow } : {}) };
   const manualEvidence = { manualResults: flags.get('--manual-results') ?? [], manualSnapshots: flags.get('--manual-snapshot') ?? [] };
   const out = value('--out');
   if (command === 'check') return config ? { command, config } : undefined;
@@ -91,7 +97,7 @@ export const parseCliArguments = (args: ReadonlyArray<string>): CliArguments | u
     const previousRun = value('--previous-run');
     const latestStagingRun = value('--latest-staging-run');
     const stylesheet = value('--stylesheet');
-    return config && currentRun && productionSnapshot && stagingSnapshot && out ? { command, config, currentRun, productionSnapshot, stagingSnapshot, out, ...manualEvidence, ...(previousRun ? { previousRun } : {}), ...(latestStagingRun ? { latestStagingRun } : {}), ...(stylesheet ? { stylesheet } : {}) } : undefined;
+    return config && currentRun && productionSnapshot && stagingSnapshot && out ? { command, config, currentRun, productionSnapshot, stagingSnapshot, out, ...manualEvidence, ...history, ...(previousRun ? { previousRun } : {}), ...(latestStagingRun ? { latestStagingRun } : {}), ...(stylesheet ? { stylesheet } : {}) } : undefined;
   }
   const currentRun = value('--current-run');
   const manifest = value('--manifest');
@@ -103,5 +109,5 @@ export const parseCliArguments = (args: ReadonlyArray<string>): CliArguments | u
     : manifest && completedAt ? { type: 'artifacts' as const, manifest, completedAt, unitArtifacts } : undefined;
   const previousRun = value('--previous-run');
   const stylesheet = value('--stylesheet');
-  return current ? { command, config, out, current, ...(previousRun ? { previousRun } : {}), ...(stylesheet ? { stylesheet } : {}) } : undefined;
+  return current ? { command, config, out, current, ...history, ...(previousRun ? { previousRun } : {}), ...(stylesheet ? { stylesheet } : {}) } : undefined;
 };

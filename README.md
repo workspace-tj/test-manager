@@ -20,6 +20,14 @@ CI開始前に確定したmanifestと、Vitest・Playwright reporterが生成し
 
 ![VitestとPlaywrightの結果を統合した日次実行画面](docs/assets/quality-dashboard-daily.png)
 
+`daily`・`dashboard` に `--history-dir <path>` を渡すと、そのディレクトリ直下の `*.json` を過去の `TestRun` として読み、日次画面に直近の推移、不安定なケース、失敗が続いているケースを追加します。
+
+- 今回のrunと同じenvironment・scopeのrunだけを置きます。異なるrunがあれば生成を拒否します。今回より新しいrunは使いません
+- 直近 `--history-window <n>` 回（既定14回）を対象にします
+- 不安定な回は、再試行で通った回（runnerがflakyと報告した回を含む）と、同じcommitの別の回では通ったのに失敗した回です。毎回失敗するケースは不安定ではなく「失敗が続いているケース」（2回以上連続）として示します。連続失敗は、そのケースのskip・欠損などの失敗以外の結果で途切れます
+- 推移の件数はcatalogに存在するケースだけを数え、成功、失敗・想定外成功、欠損、skip・想定失敗に分けます。シンボリックリンクの `*.json` も読み、サブディレクトリは読みません
+- 日次の `TestRun` をこのディレクトリへ積み上げる方法（専用ブランチ、オブジェクトストレージ、CI artifactなど）は利用側で選びます
+
 ### リリース差分
 
 前回production commitと現在のstaging commitで生成したcatalog snapshotを比較し、追加・変更・削除されたケースをdomain・feature単位に表示します。自動テストは任意でstagingの最新結果を添えます。手動ケースは任意で手動実施結果を添え、確認したcommit・日時と、確認後にケースの定義が変わったかを示します。
