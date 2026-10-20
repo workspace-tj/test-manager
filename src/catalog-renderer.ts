@@ -45,10 +45,12 @@ export const renderCatalogSite = (catalog: Catalog, integrated = false): Readonl
   const cases = [...catalog.cases].sort((left, right) => compareText(left.id, right.id));
   const byId = new Map(documents.map((document) => [document.id, document]));
   const pathOf = (document: KnowledgeDocument): ReadonlyArray<KnowledgeDocument> => breadcrumbs(document, byId);
-  const casesBelow = (document: KnowledgeDocument): ReadonlyArray<ManagedCase> => cases.filter((item) => {
+  const casesByAncestor = new Map<string, ManagedCase[]>();
+  for (const item of cases) {
     const membership = byId.get(item.fields.belongsTo);
-    return membership ? pathOf(membership).some((ancestor) => ancestor.id === document.id) : false;
-  });
+    for (const ancestor of membership ? pathOf(membership) : []) casesByAncestor.set(ancestor.id, [...(casesByAncestor.get(ancestor.id) ?? []), item]);
+  }
+  const casesBelow = (document: KnowledgeDocument): ReadonlyArray<ManagedCase> => casesByAncestor.get(document.id) ?? [];
   const rootOf = (document: KnowledgeDocument): KnowledgeDocument => pathOf(document)[0] ?? document;
   const domainOf = (item: ManagedCase): KnowledgeDocument | undefined => {
     const membership = byId.get(item.fields.belongsTo);
@@ -57,14 +59,26 @@ export const renderCatalogSite = (catalog: Catalog, integrated = false): Readonl
   const linkDocument = (document: KnowledgeDocument): string => `<a href="../documents/${safeName(document.id)}.html">${escapeHtml(document.title)}</a>`;
   const linkCase = (item: ManagedCase): string => `<a href="../cases/${safeName(item.id)}.html">${escapeHtml(item.title)}</a>`;
   const domains = documents.filter((document) => document.parent === undefined);
+  const layers = [...new Set(catalog.rules.discovery.sources.map((source) => source.layer))];
+  const caseCount = (document: KnowledgeDocument): string => {
+    const below = casesBelow(document);
+    if (below.length === 0) return '<small class="no-cases">ケースなし</small>';
+    const breakdown = layers.length > 1 ? `<span class="layer-breakdown">${layers.map((layer) => `${escapeHtml(layer)} ${below.filter((item) => item.layer === layer).length}`).join(' · ')}</span>` : '';
+    return `<small>${below.length}ケース${breakdown}</small>`;
+  };
+  const membershipKinds = new Set(catalog.rules.case.fields.belongsTo?.type === 'reference' ? catalog.rules.case.fields.belongsTo.targetKinds : []);
+  const uncovered = documents.filter((document) => membershipKinds.has(document.kind) && casesBelow(document).length === 0);
+  const uncoveredSection = uncovered.length > 0
+    ? `<section class="uncovered-documents" aria-labelledby="uncovered-heading"><h2 id="uncovered-heading">ケースのない文書</h2><p>ケースの所属先にできる文書のうち、配下にケースが1件もないものです。</p><ul>${uncovered.map((document) => `<li><a href="documents/${safeName(document.id)}.html">${escapeHtml(document.title)}</a><small>${escapeHtml(document.kind)} · ${pathOf(document).map((item) => escapeHtml(item.title)).join(' › ')}</small></li>`).join('')}</ul></section>`
+    : '';
 
   const domainCards = domains.map((domain) => {
     const features = documents.filter((document) => document.parent === domain.id);
     const summary = domain.body.trim().split(/\r?\n/u).find((line) => line.trim() && !line.startsWith('#')) ?? '';
     const search = [domain.title, summary, ...features.map((feature) => feature.title)].join(' ');
-    return `<section class="domain-overview" data-domain-overview="${escapeHtml(domain.id)}" data-search="${escapeHtml(search)}"><header><h2><a href="documents/${safeName(domain.id)}.html">${escapeHtml(domain.title)}</a></h2><span>${casesBelow(domain).length}ケース</span></header><p>${escapeHtml(summary)}</p>${features.length ? `<ul>${features.map((feature) => `<li><a href="documents/${safeName(feature.id)}.html">${escapeHtml(feature.title)}</a><small>${casesBelow(feature).length}ケース</small></li>`).join('')}</ul>` : ''}</section>`;
+    return `<section class="domain-overview" data-domain-overview="${escapeHtml(domain.id)}" data-search="${escapeHtml(search)}"><header><h2><a href="documents/${safeName(domain.id)}.html">${escapeHtml(domain.title)}</a></h2><span>${casesBelow(domain).length}ケース</span></header><p>${escapeHtml(summary)}</p>${features.length ? `<ul>${features.map((feature) => `<li><a href="documents/${safeName(feature.id)}.html">${escapeHtml(feature.title)}</a>${caseCount(feature)}</li>`).join('')}</ul>` : ''}</section>`;
   }).join('');
-  files.set('index.html', layout('ドメイン', 'catalog', '', `<div class="catalog-intro"><h1>ドメインから確認内容をたどる</h1><label class="global-search"><span>検索</span><input id="search" type="search" placeholder="ドメイン、featureを検索"></label><strong><span>${documents.length}</span>文書</strong></div><div class="domain-overviews">${domainCards}</div><script src="assets/search.js"></script>`));
+  files.set('index.html', layout('ドメイン', 'catalog', '', `<div class="catalog-intro"><h1>ドメインから確認内容をたどる</h1><label class="global-search"><span>検索</span><input id="search" type="search" placeholder="ドメイン、featureを検索"></label><strong><span>${documents.length}</span>文書</strong></div><div class="domain-overviews">${domainCards}</div>${uncoveredSection}<script src="assets/search.js"></script>`));
 
   const values = (select: (item: ManagedCase) => unknown): string[] => [...new Set(cases.map(select).filter((value): value is string | number => typeof value === 'string' || typeof value === 'number').map(String))].sort(compareText);
   const filterFields = Object.entries(catalog.rules.case.fields).filter(([name, rule]) => name !== 'belongsTo' && rule.placement === 'classification' && rule.type !== 'reference-list').map(([name]) => name).sort(compareText);
@@ -88,7 +102,7 @@ export const renderCatalogSite = (catalog: Catalog, integrated = false): Readonl
     const referenced = cases.filter((item) => Array.isArray(item.fields.refs) && item.fields.refs.includes(document.id));
     const crumb = pathOf(document).map((item) => item.id === document.id ? escapeHtml(item.title) : linkDocument(item)).join(' › ');
     const children = documents.filter((item) => item.parent === document.id);
-    files.set(`documents/${safeName(document.id)}.html`, layout(document.title, 'documents', '../', `<p>${crumb}</p><h1>${escapeHtml(document.title)}</h1><p><code>${escapeHtml(document.id)}</code> · ${escapeHtml(document.kind)}</p><article>${markdown(document.body)}</article><h2>配下の文書</h2><ul>${children.map((item) => `<li>${linkDocument(item)} <small>${escapeHtml(item.kind)}</small></li>`).join('') || '<li>0件</li>'}</ul><h2>関連文書</h2><ul>${related.map((item) => `<li>${linkDocument(item)}</li>`).join('') || '<li>0件</li>'}</ul><h2>確認定義</h2><ul>${casesBelow(document).map((item) => `<li>${linkCase(item)}</li>`).join('') || '<li>0件</li>'}</ul><h2>関連ケース</h2><ul>${referenced.map((item) => `<li>${linkCase(item)}</li>`).join('') || '<li>0件</li>'}</ul><p>Source: <code>${escapeHtml(document.location.file)}</code></p>`));
+    files.set(`documents/${safeName(document.id)}.html`, layout(document.title, 'documents', '../', `<p>${crumb}</p><h1>${escapeHtml(document.title)}</h1><p><code>${escapeHtml(document.id)}</code> · ${escapeHtml(document.kind)}</p><article>${markdown(document.body)}</article><h2>配下の文書</h2><ul>${children.map((item) => `<li>${linkDocument(item)} <small>${escapeHtml(item.kind)}</small></li>`).join('') || '<li>0件</li>'}</ul><h2>関連文書</h2><ul>${related.map((item) => `<li>${linkDocument(item)}</li>`).join('') || '<li>0件</li>'}</ul><h2>確認定義</h2><p>${caseCount(document)}</p><ul>${casesBelow(document).map((item) => `<li>${linkCase(item)}</li>`).join('') || '<li>0件</li>'}</ul><h2>関連ケース</h2><ul>${referenced.map((item) => `<li>${linkCase(item)}</li>`).join('') || '<li>0件</li>'}</ul><p>Source: <code>${escapeHtml(document.location.file)}</code></p>`));
   }
   for (const item of cases) {
     const refs = [item.fields.belongsTo, ...(item.fields.refs ?? [])];
@@ -96,7 +110,7 @@ export const renderCatalogSite = (catalog: Catalog, integrated = false): Readonl
     files.set(`cases/${safeName(item.id)}.html`, layout(item.title, 'cases', '../', `<h1>${escapeHtml(item.title)}</h1><p><code>${escapeHtml(item.id)}</code> · ${escapeHtml(item.layer)} · ${escapeHtml(item.source)} · ${escapeHtml(item.status)}</p><h2>所属・分類</h2><pre>${pretty(item.fields)}</pre><h2>条件・理由</h2><pre>${pretty(item.details)}</pre>${item.procedure ? `<h2>操作と期待結果</h2><pre>${pretty(item.procedure)}</pre>` : ''}${parameters ? `<h2>each入力表</h2><pre>${pretty(parameters)}</pre>` : ''}<h2>関連する仕様・判断</h2><ul>${refs.flatMap((id) => { const document = byId.get(id); return document ? [`<li>${linkDocument(document)}</li>`] : []; }).join('')}</ul><h2>ソース</h2><p><code>${escapeHtml(item.location.file)}:${item.location.line}</code></p><pre>${escapeHtml(item.snippet)}</pre>`));
   }
   const publicDocuments = documents.map(({ fieldLocations: _fieldLocations, ...document }) => document);
-  files.set('assets/style.css', `${catalogStyles}\n[hidden]{display:none!important}\n`);
+  files.set('assets/style.css', `${catalogStyles}\n[hidden]{display:none!important}\n.no-cases{color:#6e6e73;font-style:italic}.domain-overview li{flex-wrap:wrap;gap:2px 12px}.layer-breakdown{display:block;margin-top:2px}.uncovered-documents{margin-bottom:48px;padding:20px;background:white;border:1px solid #e4e7ec;border-radius:14px}.uncovered-documents h2{margin:0 0 4px;font-size:18px}.uncovered-documents>p{margin:0;color:#6e6e73;font-size:12px}.uncovered-documents ul{margin:12px 0 0;padding:0;list-style:none}.uncovered-documents li{padding:9px 0;display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;border-top:1px solid #e4e7ec}.uncovered-documents li a{color:#06c;text-decoration:none}\n`);
   files.set('assets/search.js', catalogSearchScript);
   files.set('catalog.json', `${JSON.stringify({ documents: publicDocuments, cases }, null, 2)}\n`);
   files.set('.test-manager-output', 'v1\n');

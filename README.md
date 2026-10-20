@@ -6,6 +6,8 @@
 
 カタログ画面は検証済みcatalogを純粋なTypeScript rendererへ渡して静的HTMLへ変換します。CLI実行時にWebフレームワークを起動せず、持ち運べる生成物をtest-managerのmanaged output境界から公開します。
 
+トップ画面のdomain一覧は、配下の文書ごとにケース数とlayer別の件数を示します。`belongsTo` の参照先にできる文書のうち配下にケースが1件もないものは「ケースのない文書」として一覧します。網羅性の判定ではなく、確認内容がまだ登録されていない事実の表示です。
+
 ![生成されたテストカタログの一覧画面](docs/assets/test-knowledge-catalog.png)
 
 test-manager はテストランナーそのものではありません。runner reporterが出力した事実をCI manifestと統合し、テスト定義と実行結果を日次・リリース差分画面へ接続します。

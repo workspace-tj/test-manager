@@ -160,6 +160,53 @@ describe('project catalog', () => {
     expect(site.get(`cases/${unitCase.id}.html`)).toContain(`<code>${unitCase.id}</code> · unit · ${unitCase.source}`);
   });
 
+  it('lists membership documents without cases and breaks counts down by layer', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-uncovered-'));
+    await cp(fixture, root, { recursive: true });
+    await writeFile(path.join(root, 'knowledge/empty-domain.md'), '---\nid: empty-domain\nkind: domain\ntitle: Empty domain\n---\n', 'utf8');
+    const result = await checkProject(path.join(root, 'test-manager.yaml'));
+    if (!result.ok) throw new Error(result.diagnostics.map((item) => item.reason).join('; '));
+    const { catalog } = result;
+    const belongsTo = catalog.rules.case.fields.belongsTo;
+    const membershipKinds = belongsTo?.type === 'reference' ? belongsTo.targetKinds : [];
+    const ancestors = (id: string): ReadonlyArray<string> => {
+      const document = catalog.documents.find((item) => item.id === id);
+      return document ? [document.id, ...(document.parent ? ancestors(document.parent) : [])] : [];
+    };
+    const below = (id: string) => catalog.cases.filter((item) => ancestors(item.fields.belongsTo).includes(id));
+    const site = await renderSite(catalog);
+    const index = site.get('index.html') ?? '';
+    const uncovered = catalog.documents.filter((document) => membershipKinds.includes(document.kind) && below(document.id).length === 0);
+    expect(uncovered.map((document) => document.id)).toContain('empty-domain');
+    expect(index).toContain('<h2 id="uncovered-heading">ケースのない文書</h2>');
+    const section = index.slice(index.indexOf('uncovered-heading'));
+    for (const document of catalog.documents) {
+      expect(section.includes(`<a href="documents/${document.id}.html">`)).toBe(uncovered.includes(document));
+    }
+    const layers = [...new Set(catalog.rules.discovery.sources.map((source) => source.layer))];
+    const feature = 'order-cancellation';
+    const breakdown = layers.map((layer) => `${layer} ${below(feature).filter((item) => item.layer === layer).length}`).join(' · ');
+    expect(site.get(`documents/${feature}.html`)).toContain(`<small>${below(feature).length}ケース<span class="layer-breakdown">${breakdown}</span></small>`);
+    expect(site.get('documents/empty-domain.html')).toContain('<small class="no-cases">ケースなし</small>');
+  });
+
+  it('omits the layer breakdown for a single layer and the uncovered section when every document has cases', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-single-layer-'));
+    const config = (await readFile(path.resolve('fixtures/alternate-rules.yaml'), 'utf8'))
+      .replace('fixtures/none/**/*.md', 'knowledge/**/*.md')
+      .replace('sources: []', 'sources:\n    - { kind: manual, layer: manual, paths: ["knowledge/**/*.manual.yaml"] }');
+    await mkdir(path.join(root, 'knowledge'), { recursive: true });
+    await writeFile(path.join(root, 'test-manager.yaml'), config, 'utf8');
+    await writeFile(path.join(root, 'knowledge/module.md'), `---\nid: MOD-1\nkind: module\ntitle: Module one\n---\n`, 'utf8');
+    await writeFile(path.join(root, 'knowledge/module-two.md'), `---\nid: MOD-2\nkind: module\ntitle: Module two\nparent: MOD-1\n---\n`, 'utf8');
+    await writeFile(path.join(root, 'knowledge/case.manual.yaml'), `id: CASE-1\ntitle: alternate\nbelongsTo: MOD-2\nrole: contract\nimpact: 20\nsteps:\n  - action: act\n    expected: done\n`, 'utf8');
+    const result = await checkProject(path.join(root, 'test-manager.yaml'));
+    if (!result.ok) throw new Error(result.diagnostics.map((item) => item.reason).join('; '));
+    const site = await renderSite(result.catalog);
+    expect(site.get('index.html')).not.toContain('uncovered-heading');
+    expect(site.get('documents/MOD-1.html')).toContain('<small>1ケース</small>');
+  });
+
   it('reports missing belongsTo and does not inherit it from a parent or path', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-invalid-'));
     await cp(fixture, root, { recursive: true });
