@@ -72,6 +72,8 @@ node dist/cli-entry.js dashboard \
 
 Linux CIではブラウザのシステム依存も必要なため、`.github/workflows/ci.yml` が `pnpm exec playwright install --with-deps chromium` を実行します。ローカルのmacOSでは上記の `playwright install chromium` で十分です。
 
+consumerリポジトリでtest-managerをcommit SHAに固定して実行し、Vitest・Playwrightの結果から統合dashboard artifactを生成する場合は、[GitHub Actions導入例](examples/github-actions/README.md)を使用できます。
+
 E2Eの画面操作は `src/quality-site.e2e.pages.ts` の薄いPage Objectへ集約し、fixture生成とHTTP応答は `src/quality-site.e2e.fixture.ts` が担当します。specには利用者が達成するシナリオだけを記述します。
 
 `check` は検査成功時に `0`、診断がある場合に `1`、CLI の使い方が不正な場合に `2` を返します。`build`、`daily`、`snapshot`、`release`、`dashboard` は入力検査成功後だけ、test-manager所有マーカーを持つ安全な出力ディレクトリへ生成します。

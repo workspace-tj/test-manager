@@ -1,0 +1,147 @@
+name: Test manager dashboard
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 21 * * 1-5'
+
+permissions:
+  contents: read
+
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TM_TOOL_DIR: ${{ runner.temp }}/test-manager-tool
+      TM_STATE_DIR: ${{ runner.temp }}/test-manager-state
+      TM_PRODUCTION_DIR: ${{ runner.temp }}/test-manager-production
+      TM_TOOL_REF: ${{ vars.TEST_MANAGER_REF }}
+      TM_PRODUCTION_REF: ${{ vars.TEST_MANAGER_PRODUCTION_REF }}
+      TM_ENVIRONMENT: staging
+      TM_SCOPE_ID: daily-all
+      TM_ID_PATTERN: ^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$
+      TM_VITEST_UNIT_ID: vitest-unit-node
+      TM_VITEST_LAYER: unit
+      TM_VITEST_TARGET: node
+      TM_PLAYWRIGHT_UNIT_ID: playwright-e2e-chromium
+      TM_PLAYWRIGHT_LAYER: E2E
+      TM_PLAYWRIGHT_TARGET: chromium
+    steps:
+      - name: Checkout current commit
+        uses: actions/checkout@v4
+
+      - name: Validate pinned refs
+        shell: bash
+        run: |
+          if [[ ! "$TM_TOOL_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'TEST_MANAGER_REF must be a full 40-character commit SHA' >&2
+            exit 1
+          fi
+          if [[ ! "$TM_PRODUCTION_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'TEST_MANAGER_PRODUCTION_REF must be a full 40-character commit SHA' >&2
+            exit 1
+          fi
+
+      - name: Checkout production commit outside the consumer workspace
+        shell: bash
+        run: |
+          git fetch --depth 1 origin "$TM_PRODUCTION_REF"
+          git worktree add --detach "$TM_PRODUCTION_DIR" FETCH_HEAD
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install consumer dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium and its Linux dependencies
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Fetch pinned test-manager
+        shell: bash
+        run: |
+          git init "$TM_TOOL_DIR"
+          git -C "$TM_TOOL_DIR" remote add origin https://github.com/workspace-tj/test-manager.git
+          git -C "$TM_TOOL_DIR" fetch --depth 1 origin "$TM_TOOL_REF"
+          git -C "$TM_TOOL_DIR" checkout --detach FETCH_HEAD
+          pnpm --dir "$TM_TOOL_DIR" install --frozen-lockfile
+          pnpm --dir "$TM_TOOL_DIR" build
+
+      - name: Record explicit run metadata
+        shell: bash
+        run: |
+          echo "TM_RUN_ID=$GITHUB_RUN_ID" >> "$GITHUB_ENV"
+          echo "TM_RUN_ATTEMPT=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+          echo "TM_COMMIT=$GITHUB_SHA" >> "$GITHUB_ENV"
+          echo "TM_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+          echo "TM_CI_URL=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> "$GITHUB_ENV"
+
+      - name: Build current catalog
+        run: node "$TM_TOOL_DIR/dist/cli-entry.js" build --config test-manager.yaml --out "$TM_STATE_DIR/catalog"
+
+      - name: Create run manifest
+        run: node "$TM_TOOL_DIR/examples/github-actions/create-manifest.mjs" --catalog "$TM_STATE_DIR/catalog/catalog.json" --id-pattern "$TM_ID_PATTERN" --out "$TM_STATE_DIR/manifest.json"
+
+      - name: Run Vitest
+        id: vitest
+        continue-on-error: true
+        run: pnpm vitest run
+
+      - name: Run Playwright
+        id: playwright
+        continue-on-error: true
+        run: pnpm playwright test --project=chromium
+
+      - name: Assemble TestRun
+        shell: bash
+        run: |
+          completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          node "$TM_TOOL_DIR/examples/github-actions/assemble-run.mjs" \
+            --manifest "$TM_STATE_DIR/manifest.json" \
+            --artifact-directory "$TM_STATE_DIR/unit-artifacts" \
+            --completed-at "$completed_at" \
+            --id-pattern "$TM_ID_PATTERN" \
+            --out "$TM_STATE_DIR/test-run.json"
+
+      - name: Snapshot production catalog
+        run: node "$TM_TOOL_DIR/dist/cli-entry.js" snapshot --config "$TM_PRODUCTION_DIR/test-manager.yaml" --commit "$TM_PRODUCTION_REF" --out "$TM_STATE_DIR/production-snapshot"
+
+      - name: Snapshot staging catalog
+        run: node "$TM_TOOL_DIR/dist/cli-entry.js" snapshot --config test-manager.yaml --commit "$GITHUB_SHA" --out "$TM_STATE_DIR/staging-snapshot"
+
+      - name: Build integrated dashboard
+        run: |
+          node "$TM_TOOL_DIR/dist/cli-entry.js" dashboard \
+            --config test-manager.yaml \
+            --current-run "$TM_STATE_DIR/test-run.json" \
+            --production-snapshot "$TM_STATE_DIR/production-snapshot/release-catalog.json" \
+            --staging-snapshot "$TM_STATE_DIR/staging-snapshot/release-catalog.json" \
+            --latest-staging-run "$TM_STATE_DIR/test-run.json" \
+            --out "$TM_STATE_DIR/dashboard"
+
+      - name: Publish dashboard and diagnostic inputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-manager-dashboard
+          path: |
+            ${{ env.TM_STATE_DIR }}/dashboard
+            ${{ env.TM_STATE_DIR }}/manifest.json
+            ${{ env.TM_STATE_DIR }}/test-run.json
+            ${{ env.TM_STATE_DIR }}/unit-artifacts
+          if-no-files-found: error
+
+      - name: Preserve runner failure as job failure
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ steps.vitest.outcome }}" != success || "${{ steps.playwright.outcome }}" != success ]]; then
+            exit 1
+          fi
