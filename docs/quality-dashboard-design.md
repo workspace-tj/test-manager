@@ -68,7 +68,7 @@ Test Managerは、仕様・テストケース・実行結果を結び、利用�
 
 ### 3. ケースを探索する
 
-domain、feature、状態、任意の分類からケースを検索します。unit、E2E、手動などのsourceは確認方法を示す補助情報であり、網羅性を見る主分類にはしません。
+domain、feature、状態、任意の分類からケースを検索します。sourceとlayer（vitest・手動、unit・e2eなど）は確認方法を示す補助情報であり、網羅性を見る主分類にはしません。
 
 ### 4. 長期傾向を振り返る
 
@@ -96,7 +96,18 @@ Test Manager coreは、未確認・調査中・修正中などの作業状態や
 
 別の受け入れ条件文書を必須にしません。明確なケース名、前提、期待結果、理由をケース自身へ記録できます。関連する判断や外部の正本がある場合だけ `refs` で参照します。
 
-unit、integration、component、E2E、手動を別々の網羅性として評価しません。すべてを同じfeatureのケース集合として扱い、sourceは各ケースの補助情報として表示します。
+unit、integration、component、E2E、手動を別々の網羅性として評価しません。すべてを同じfeatureのケース集合として扱い、sourceとlayerは各ケースの補助情報として表示します。
+
+### sourceとlayer
+
+各ケースは二つの分類を持ちます。
+
+- `source`: 記述方式。`manual`、`vitest`、`playwright`、`storybook` のいずれか
+- `layer`: そのケースが確かめるテスト層。`unit`、`integration`、`e2e` などプロジェクトが自由に名付ける
+
+どちらもケースごとに書かず、`discovery.sources` の各行 `{kind, layer, paths}` から、ファイルの置き場所と名前で決めます。手動ケースも `kind: manual` として同じ一覧に並べ、自動テストと同じlayerの軸で扱います。同じkindを複数行に分ければ、パスでlayerを分けられます。たとえばintegrationテストを慣習どおり `*.integration.test.ts` とする場合は、unit側のglobで除外して重複を避けます。一つのファイルが複数行に一致した場合は設定エラーです。
+
+`requiredWhen` は他のcase項目に加えて `source` と `layer` を条件にできます。E2Eだけに必要な項目のような層固有の要件は、専用の種別を増やさずこの条件付き必須で表します。
 
 ### domainとfeature
 
@@ -192,7 +203,7 @@ domain一覧
   ↓
 feature一覧
   ↓
-sourceを横断したケース一覧
+source・layerを横断したケース一覧（layerで絞り込める）
 ```
 
 ## 情報の強弱
@@ -219,7 +230,7 @@ sourceを横断したケース一覧
 
 ### catalog
 
-- case ID、title、所属、refs、分類、詳細、source、定義状態
+- case ID、title、所属、refs、分類、詳細、source、layer、定義状態
 - domain、featureとその関係
 - ソース位置
 
@@ -250,7 +261,7 @@ sourceを横断したケース一覧
 
 | 画面の情報 | 現在の取得元 | 状態 |
 | --- | --- | --- |
-| case ID、title、source、定義状態 | `Catalog.cases` | 取得済み |
+| case ID、title、source、layer、定義状態 | `Catalog.cases` | 取得済み。source・layerは `discovery.sources` の行から決まる |
 | 所属、refs、分類、理由、条件 | `fields` / `details` | 取得済み。所属は `belongsTo` |
 | domain・feature関係 | `Catalog.documents` の `kind` / `parent` | 取得済み。kind名はプロジェクト設定依存 |
 | domainの表示順 | `ProjectRules.documents.displayOrder` | 実装済み |
@@ -261,8 +272,6 @@ sourceを横断したケース一覧
 | リリース区間のPRと宣言feature | 変更情報adapter | 未実装 |
 | ケースの追加・変更・削除 | 二つのcommitから生成したcatalog | 実装済み |
 
-旧 `owner` から `belongsTo` へのmigrationは実行結果取込と分離して行いました。取込側は内部概念を「所属」として参照し、旧フィールド名を新しい実行結果形式へ持ち込みません。
-
 ### 収集単位
 
 一回の日次実行は一つの環境だけを持ち、その中に複数の実行unitを持ちます。unitはrunner、test layer、targetの組み合わせです。
@@ -272,8 +281,10 @@ Daily run: dev / commit 7f3a12c / scope daily-all
   ├─ vitest / unit / node
   ├─ vitest / integration / test-database
   ├─ playwright / component / chromium
-  └─ playwright / E2E / chromium
+  └─ playwright / e2e / chromium
 ```
+
+unitのlayerはcatalogのlayerと同じ語彙です。CIが独自にlayerを名乗るのではなく、計画したケースのlayerからunitのlayerを決めます。日次画面とリリース差分は、unitのlayerが計画したケースのlayerと一致しないrunを拒否します。runnerごとに1unitへまとめる構成では、同じrunnerのケースが複数layerにまたがる場合、layerごとに実行とunitを分けます。
 
 `dev`、`staging`、`production`を一つのrunへ混ぜません。test layerも環境ではありません。環境を切り替えた場合は、別のrunを表示します。
 
@@ -395,7 +406,7 @@ case差分はcase IDをidentityとして比較します。
 - 両方に存在し、管理対象の定義が異なる: 変更
 - 比較元だけに存在する: 削除
 
-snippetや絶対パスなど、環境差で変わる値を意味的な変更判定へ含めません。「管理対象の定義」はrelease catalog生成時の比較projectionとして固定しています。
+layerは管理対象の定義に含みます。layerだけが変わったケースも変更として扱い、画面には変更前と変更後のlayerを示します。snippetや絶対パスなど、環境差で変わる値を意味的な変更判定へ含めません。「管理対象の定義」はrelease catalog生成時の比較projectionとして固定しています。
 
 ### 導入状況
 
@@ -405,7 +416,8 @@ snippetや絶対パスなど、環境差で変わる値を意味的な変更判�
 4. [x] Playwright reporter adapterと複数unitのmergeを実装する
 5. [x] CI manifestとの照合と不完全runの表示を実装する
 6. [x] catalog diffとrelease view builderを実装する
-7. [ ] GitHub adapterを任意連携として追加する
+7. [x] discovery sourcesでケースのlayerを決め、unitのlayerと照合する
+8. [ ] GitHub adapterを任意連携として追加する
 
 最初から履歴DBやGitHub Appを導入しません。日次画面は「今回と前回」の二つのartifactを入力に生成できるため、まずCI artifactだけで成立させます。長期傾向の要件が確定してから、同じ正規化runを保存する永続化方式を選びます。
 
