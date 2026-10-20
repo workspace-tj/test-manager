@@ -4,18 +4,19 @@ export const cliUsage = `Usage:
   test-manager snapshot --config <path> --commit <sha> --out <path>
   test-manager daily --config <path> [--stylesheet <path>] --out <path> --current-run <path> [--previous-run <path>]
   test-manager daily --config <path> [--stylesheet <path>] --out <path> --manifest <path> --completed-at <timestamp> [--unit-artifact <path> ...] [--previous-run <path>]
-  test-manager release --production-snapshot <path> --staging-snapshot <path> [--stylesheet <path>] --out <path> [--latest-staging-run <path>]
-  test-manager dashboard --config <path> --current-run <path> [--previous-run <path>] --production-snapshot <path> --staging-snapshot <path> [--latest-staging-run <path>] [--stylesheet <path>] --out <path>`;
+  test-manager release --production-snapshot <path> --staging-snapshot <path> [--stylesheet <path>] --out <path> [--latest-staging-run <path>] [--manual-results <path> ...] [--manual-snapshot <path> ...]
+  test-manager dashboard --config <path> --current-run <path> [--previous-run <path>] --production-snapshot <path> --staging-snapshot <path> [--latest-staging-run <path>] [--manual-results <path> ...] [--manual-snapshot <path> ...] [--stylesheet <path>] --out <path>`;
 
 type CommonSiteOptions = Readonly<{ out: string; stylesheet?: string }>;
+type ManualEvidenceOptions = Readonly<{ manualResults: ReadonlyArray<string>; manualSnapshots: ReadonlyArray<string> }>;
 
 export type CliArguments =
   | Readonly<{ command: 'check'; config: string }>
   | Readonly<{ command: 'build'; config: string; out: string }>
   | Readonly<{ command: 'snapshot'; config: string; commit: string; out: string }>
   | (Readonly<{ command: 'daily'; config: string; previousRun?: string; current: Readonly<{ type: 'run'; path: string }> | Readonly<{ type: 'artifacts'; manifest: string; completedAt: string; unitArtifacts: ReadonlyArray<string> }> }> & CommonSiteOptions)
-  | (Readonly<{ command: 'release'; productionSnapshot: string; stagingSnapshot: string; latestStagingRun?: string }> & CommonSiteOptions)
-  | (Readonly<{ command: 'dashboard'; config: string; currentRun: string; previousRun?: string; productionSnapshot: string; stagingSnapshot: string; latestStagingRun?: string }> & CommonSiteOptions);
+  | (Readonly<{ command: 'release'; productionSnapshot: string; stagingSnapshot: string; latestStagingRun?: string }> & CommonSiteOptions & ManualEvidenceOptions)
+  | (Readonly<{ command: 'dashboard'; config: string; currentRun: string; previousRun?: string; productionSnapshot: string; stagingSnapshot: string; latestStagingRun?: string }> & CommonSiteOptions & ManualEvidenceOptions);
 
 type Command = CliArguments['command'];
 const allowedFlags: Readonly<Record<Command, ReadonlySet<string>>> = {
@@ -23,9 +24,11 @@ const allowedFlags: Readonly<Record<Command, ReadonlySet<string>>> = {
   build: new Set(['--config', '--out']),
   snapshot: new Set(['--config', '--commit', '--out']),
   daily: new Set(['--config', '--out', '--stylesheet', '--current-run', '--previous-run', '--manifest', '--completed-at', '--unit-artifact']),
-  release: new Set(['--production-snapshot', '--staging-snapshot', '--latest-staging-run', '--stylesheet', '--out']),
-  dashboard: new Set(['--config', '--current-run', '--previous-run', '--production-snapshot', '--staging-snapshot', '--latest-staging-run', '--stylesheet', '--out']),
+  release: new Set(['--production-snapshot', '--staging-snapshot', '--latest-staging-run', '--manual-results', '--manual-snapshot', '--stylesheet', '--out']),
+  dashboard: new Set(['--config', '--current-run', '--previous-run', '--production-snapshot', '--staging-snapshot', '--latest-staging-run', '--manual-results', '--manual-snapshot', '--stylesheet', '--out']),
 };
+
+const repeatableFlags: ReadonlySet<string> = new Set(['--unit-artifact', '--manual-results', '--manual-snapshot']);
 
 const collectFlags = (command: Command, args: ReadonlyArray<string>): ReadonlyMap<string, ReadonlyArray<string>> | undefined => {
   const result = new Map<string, string[]>();
@@ -34,7 +37,7 @@ const collectFlags = (command: Command, args: ReadonlyArray<string>): ReadonlyMa
     const value = args[index + 1];
     if (!flag || !value || !flag.startsWith('--') || value.startsWith('--') || !allowedFlags[command].has(flag)) return undefined;
     const previous = result.get(flag) ?? [];
-    if (previous.length > 0 && flag !== '--unit-artifact') return undefined;
+    if (previous.length > 0 && !repeatableFlags.has(flag)) return undefined;
     result.set(flag, [...previous, value]);
   }
   return result;
@@ -47,6 +50,7 @@ export const parseCliArguments = (args: ReadonlyArray<string>): CliArguments | u
   if (!flags) return undefined;
   const value = (flag: string): string | undefined => flags.get(flag)?.[0];
   const config = value('--config');
+  const manualEvidence = { manualResults: flags.get('--manual-results') ?? [], manualSnapshots: flags.get('--manual-snapshot') ?? [] };
   const out = value('--out');
   if (command === 'check') return config ? { command, config } : undefined;
   if (command === 'build') return config && out ? { command, config, out } : undefined;
@@ -59,7 +63,7 @@ export const parseCliArguments = (args: ReadonlyArray<string>): CliArguments | u
     const stagingSnapshot = value('--staging-snapshot');
     const latestStagingRun = value('--latest-staging-run');
     const stylesheet = value('--stylesheet');
-    return productionSnapshot && stagingSnapshot && out ? { command, productionSnapshot, stagingSnapshot, out, ...(latestStagingRun ? { latestStagingRun } : {}), ...(stylesheet ? { stylesheet } : {}) } : undefined;
+    return productionSnapshot && stagingSnapshot && out ? { command, productionSnapshot, stagingSnapshot, out, ...manualEvidence, ...(latestStagingRun ? { latestStagingRun } : {}), ...(stylesheet ? { stylesheet } : {}) } : undefined;
   }
   if (command === 'dashboard') {
     const currentRun = value('--current-run');
@@ -68,7 +72,7 @@ export const parseCliArguments = (args: ReadonlyArray<string>): CliArguments | u
     const previousRun = value('--previous-run');
     const latestStagingRun = value('--latest-staging-run');
     const stylesheet = value('--stylesheet');
-    return config && currentRun && productionSnapshot && stagingSnapshot && out ? { command, config, currentRun, productionSnapshot, stagingSnapshot, out, ...(previousRun ? { previousRun } : {}), ...(latestStagingRun ? { latestStagingRun } : {}), ...(stylesheet ? { stylesheet } : {}) } : undefined;
+    return config && currentRun && productionSnapshot && stagingSnapshot && out ? { command, config, currentRun, productionSnapshot, stagingSnapshot, out, ...manualEvidence, ...(previousRun ? { previousRun } : {}), ...(latestStagingRun ? { latestStagingRun } : {}), ...(stylesheet ? { stylesheet } : {}) } : undefined;
   }
   const currentRun = value('--current-run');
   const manifest = value('--manifest');

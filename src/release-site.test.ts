@@ -17,7 +17,7 @@ describe('release difference site', () => {
     expect(html).toContain('staging');
     expect(html).toContain('注文取消');
     expect(html).toContain('自動 · vitest');
-    expect(html).toContain('手動確認');
+    expect(html).toContain('手動 · 実施結果なし');
     expect(html).toContain('<span class="label success">追加</span><span class="label warning">planned</span>');
     expect(html).not.toContain('必要なテストをすべて網羅');
     expect(html).not.toContain('リリース可能');

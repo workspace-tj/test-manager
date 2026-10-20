@@ -130,6 +130,28 @@ describe('CLI process boundary', () => {
     expect(html).not.toContain('リリース可能');
   });
 
+  it('reads manual result sets for the release comparison and rejects a snapshot without results', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-cli-manual-'));
+    const productionDirectory = path.join(root, 'production-snapshot');
+    const stagingDirectory = path.join(root, 'staging-snapshot');
+    expect((await run(['snapshot', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--commit', '6e2b11a', '--out', productionDirectory])).code).toBe(0);
+    expect((await run(['snapshot', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--commit', '7f3a12c', '--out', stagingDirectory])).code).toBe(0);
+    const productionSnapshot = path.join(productionDirectory, 'release-catalog.json');
+    const stagingSnapshot = path.join(stagingDirectory, 'release-catalog.json');
+    const parsedPrevious = parseReleaseCatalogSnapshot(JSON.parse(await readFile(productionSnapshot, 'utf8')));
+    if (!parsedPrevious.success) throw new Error('generated release snapshot must parse');
+    await writeFile(productionSnapshot, JSON.stringify({ ...parsedPrevious.data, cases: parsedPrevious.data.cases.filter((item) => item.id !== 'CASE-110') }));
+    const manualResults = path.join(root, 'manual.json');
+    await writeFile(manualResults, JSON.stringify({ schemaVersion: 1, environment: 'staging', commit: '7f3a12c', executedBy: 'qa-team', results: [{ caseId: 'CASE-110', executedAt: '2026-10-20T10:00:00Z', outcome: 'blocked' }] }));
+    const out = path.join(root, 'release');
+    const result = await run(['release', '--production-snapshot', productionSnapshot, '--staging-snapshot', stagingSnapshot, '--manual-results', manualResults, '--out', out]);
+    expect(result.code).toBe(0);
+    expect(await readFile(path.join(out, 'release.html'), 'utf8')).toContain('手動 · blocked · 7f3a12c · 2026-10-20 · qa-team');
+    const rejected = await run(['release', '--production-snapshot', productionSnapshot, '--staging-snapshot', stagingSnapshot, '--manual-snapshot', stagingSnapshot, '--out', path.join(root, 'rejected')]);
+    expect(rejected.code).not.toBe(0);
+    expect(rejected.stderr).toContain('--manual-snapshot requires --manual-results');
+  });
+
   it('publishes daily, release, and catalog as one navigable site', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-cli-dashboard-'));
     const out = path.join(root, 'site');

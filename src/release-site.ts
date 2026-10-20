@@ -5,7 +5,14 @@ import { renderQualityPage } from './quality-page.js';
 const changeLabel: Readonly<Record<ReleaseCaseChange['kind'], string>> = { added: '追加', changed: '変更', removed: '削除' };
 const changeClass: Readonly<Record<ReleaseCaseChange['kind'], string>> = { added: 'success', changed: 'warning', removed: 'neutral' };
 const resultLabel = (verification: ReleaseCaseChange['verification']): string => {
-  if (verification.kind === 'manual') return '手動確認';
+  if (verification.kind === 'manual') {
+    const manual = verification.latest;
+    if (manual.kind === 'recorded') return `手動 · ${manual.outcome} · ${manual.commit.slice(0, 7)} · ${manual.executedAt.slice(0, 10)}${manual.executedBy ? ` · ${manual.executedBy}` : ''}`;
+    const manualSuffix: Readonly<Record<Exclude<typeof manual.kind, 'recorded'>, string>> = {
+      notProvided: '実施結果なし', notRecorded: '未実施', notApplicable: '削除済み',
+    };
+    return `手動 · ${manualSuffix[manual.kind]}`;
+  }
   const latest = verification.latest;
   if (latest.kind === 'observed') return `自動 · ${verification.source} · ${latest.status}`;
   const suffix: Readonly<Record<Exclude<typeof latest.kind, 'observed'>, string>> = {
@@ -16,6 +23,9 @@ const resultLabel = (verification: ReleaseCaseChange['verification']): string =>
 
 const layerLabel = (item: Readonly<{ layer: string; previousLayer?: string }>): string => item.previousLayer === undefined ? item.layer : `${item.previousLayer} → ${item.layer}`;
 
+const staleLabel = (verification: ReleaseCaseChange['verification']): string =>
+  verification.kind === 'manual' && verification.latest.kind === 'recorded' && verification.latest.changedSinceExecution ? '<span class="label warning">確認後に変更あり</span>' : '';
+
 const renderGroup = (group: ReleaseDiffView['groups'][number]): string => {
   const path = group.featureId ? `${group.domainId} / ${group.featureId}` : group.domainId;
   const title = group.featureTitle ?? group.domainTitle;
@@ -23,7 +33,7 @@ const renderGroup = (group: ReleaseDiffView['groups'][number]): string => {
   const currentRows = group.inventory.map((item) => {
     const label = item.change === 'unchanged' ? '既存' : changeLabel[item.change];
     const labelClass = item.change === 'unchanged' ? 'neutral' : changeClass[item.change];
-    return `<li><div class="row-copy"><h3>${escapeHtml(item.title)}</h3><p><code>${escapeHtml(item.caseId)}</code> · ${escapeHtml(layerLabel(item))} · ${escapeHtml(resultLabel(item.verification))}</p></div><div class="row-detail"><span class="label ${labelClass}">${label}</span>${item.definition === 'todo' ? '<span class="label warning">planned</span>' : ''}</div></li>`;
+    return `<li><div class="row-copy"><h3>${escapeHtml(item.title)}</h3><p><code>${escapeHtml(item.caseId)}</code> · ${escapeHtml(layerLabel(item))} · ${escapeHtml(resultLabel(item.verification))}</p></div><div class="row-detail"><span class="label ${labelClass}">${label}</span>${staleLabel(item.verification)}${item.definition === 'todo' ? '<span class="label warning">planned</span>' : ''}</div></li>`;
   }).join('');
   const removedRows = group.changes.filter((change) => change.kind === 'removed').map((change) => `<li><div class="row-copy"><h3>${escapeHtml(change.title)}</h3><p><code>${escapeHtml(change.caseId)}</code> · ${escapeHtml(layerLabel(change))} · ${escapeHtml(resultLabel(change.verification))}</p></div><div class="row-detail"><span class="label neutral">削除</span></div></li>`).join('');
   return `<article class="feature-card"><div class="feature-card-header"><div><p class="feature-path">${escapeHtml(path)}</p><h2>${escapeHtml(title)}</h2></div><dl class="compact-stats"><div><dt>追加</dt><dd>${count('added')}</dd></div><div><dt>変更</dt><dd>${count('changed')}</dd></div><div><dt>削除</dt><dd>${count('removed')}</dd></div></dl></div><ul class="grouped-list case-list">${currentRows}${removedRows}</ul></article>`;

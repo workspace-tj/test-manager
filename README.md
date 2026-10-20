@@ -22,7 +22,7 @@ CI開始前に確定したmanifestと、Vitest・Playwright reporterが生成し
 
 ### リリース差分
 
-前回production commitと現在のstaging commitで生成したcatalog snapshotを比較し、追加・変更・削除されたケースをdomain・feature単位に表示します。自動テストは任意でstagingの最新結果を添え、手動ケースは確認手段としてそのまま示します。
+前回production commitと現在のstaging commitで生成したcatalog snapshotを比較し、追加・変更・削除されたケースをdomain・feature単位に表示します。自動テストは任意でstagingの最新結果を添えます。手動ケースは任意で手動実施結果を添え、確認したcommit・日時と、確認後にケースの定義が変わったかを示します。
 
 ![productionとstagingのcatalogを比較したリリース差分画面](docs/assets/quality-dashboard-release.png)
 
@@ -83,6 +83,26 @@ E2Eの画面操作は `src/quality-site.e2e.pages.ts` の薄いPage Objectへ集
 日次・リリース差分・統合dashboardの標準スタイルはtest-manager自身が同梱します。見た目を置き換える必要がある場合だけ `--stylesheet <path>` を指定します。
 
 リリース差分では、productionとstagingの各checkoutで `snapshot --config <path> --commit <sha> --out <path>` を実行します。その `release-catalog.json` 2件を `release --production-snapshot <path> --staging-snapshot <path> --out <path>` へ渡します。stagingの実行事実も表示する場合は、同じcommit・`staging`環境のrunを `--latest-staging-run` で指定します。
+
+手動ケースの実施結果は `--manual-results <path>` で渡します（`release`・`dashboard`、複数指定可）。記録した場所や外部ツールは問わず、次の形式のJSONへ変換して渡します。
+
+```json
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "commit": "7f3a12c",
+  "executedBy": "qa-team",
+  "results": [
+    { "caseId": "CASE-101", "executedAt": "2026-10-20T10:00:00+09:00", "outcome": "passed", "note": "端末Bで確認", "evidenceUrl": "https://example.com/evidence/1" }
+  ]
+}
+```
+
+- `outcome` は `passed`、`failed`、`blocked` のいずれかです。`note` と `evidenceUrl`（HTTP(S)）は任意です
+- 同じケースに複数の結果がある場合は、`executedAt` が最も新しいものを表示します。同じ時刻で結果やcommitが異なる場合は拒否します。日付は記録されたoffsetのまま表示します
+- `commit` は完全なSHAでも、snapshotのcommitと一意に対応する短縮SHAでも構いません
+- 確認したcommitのcatalog snapshotと比較し、確認後にケースの定義が変わっていれば「確認後に変更あり」を示します。productionとstaging以外のcommitで確認した場合は、そのcommitのsnapshotを `--manual-snapshot <path>`（複数指定可）で渡します
+- `staging` 以外の環境の結果、そのcommitのcatalogに存在しないケースや手動ケース以外への結果は拒否します
 
 manifestにはrun ID、attempt、environment、commit、scope、開始時刻、HTTP(S)のCI URL、実行予定unitとcase IDだけを記録します。GitHub Actions context全体や機密情報は保存しません。unit artifactが生成されなかった場合は`artifactMissing`、runnerが結果を残して途中終了した場合は`runnerError`などのincomplete理由として扱い、両者を混同しません。attachmentは設定したartifact root内だけを許可し、相対参照として保存します。
 
@@ -289,7 +309,7 @@ steps:
     expected: キャンセル操作が無効である
 ```
 
-実施結果の入力欄はありません。手動ケースも「何を確認するか」の定義として扱います。
+手動ケースも「何を確認するか」の定義として扱い、実施結果はケースのファイルに書きません。実施結果はリリース差分の生成時に `--manual-results` で渡します。
 
 ## CI で検査する
 

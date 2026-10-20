@@ -32,7 +32,7 @@ describe('release catalog difference', () => {
       expect.objectContaining({ kind: 'added', caseId: 'CASE-101', verification: { kind: 'automated', source: 'vitest', latest: { kind: 'notProvided' } } }),
       expect.objectContaining({ kind: 'changed', caseId: 'CASE-102' }),
       expect.objectContaining({ kind: 'removed', caseId: 'CASE-109' }),
-      expect.objectContaining({ kind: 'added', caseId: 'CASE-110', verification: { kind: 'manual' } }),
+      expect.objectContaining({ kind: 'added', caseId: 'CASE-110', verification: { kind: 'manual', latest: { kind: 'notProvided' } } }),
     ]));
     expect(result.view.groups).toEqual(expect.arrayContaining([
       expect.objectContaining({ domainId: 'orders', featureId: 'order-cancellation' }),
@@ -42,7 +42,7 @@ describe('release catalog difference', () => {
     expect(billing?.inventory).toEqual(expect.arrayContaining([
       expect.objectContaining({ caseId: 'CASE-104', change: 'unchanged', verification: expect.objectContaining({ kind: 'automated' }) }),
       expect.objectContaining({ caseId: 'CASE-111', definition: 'todo', change: 'unchanged' }),
-      expect.objectContaining({ caseId: 'CASE-110', verification: { kind: 'manual' } }),
+      expect.objectContaining({ caseId: 'CASE-110', verification: { kind: 'manual', latest: { kind: 'notProvided' } } }),
     ]));
   });
 

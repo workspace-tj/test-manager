@@ -27,6 +27,16 @@ describe('CLI argument grammar', () => {
     });
   });
 
+  it('accepts repeated manual result sets and snapshots for release comparisons', () => {
+    expect(parseCliArguments([
+      'release', '--production-snapshot', 'production.json', '--staging-snapshot', 'staging.json', '--out', 'site',
+      '--manual-results', 'qa-a.json', '--manual-results', 'qa-b.json', '--manual-snapshot', 'older.json',
+    ])).toEqual({
+      command: 'release', productionSnapshot: 'production.json', stagingSnapshot: 'staging.json', out: 'site',
+      manualResults: ['qa-a.json', 'qa-b.json'], manualSnapshots: ['older.json'],
+    });
+  });
+
   it.each([
     ['unknown command', ['unknown']],
     ['missing flag value', ['check', '--config']],

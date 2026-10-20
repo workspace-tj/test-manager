@@ -1,6 +1,8 @@
 import { observedCaseStatus } from './case-result.js';
 import type { ObservedCaseStatus } from './case-result.js';
+import { sameReleaseCatalogContent } from './release-catalog.js';
 import type { ReleaseCatalogCase, ReleaseCatalogSnapshot } from './release-catalog.js';
+import type { ManualOutcome, ManualResultSet } from './manual-result.js';
 import type { TestRun } from './test-run.js';
 import { describeTestRunCatalogProblem, validateTestRunCatalog } from './test-run-catalog.js';
 
@@ -9,8 +11,13 @@ type LatestResult = Readonly<
   | { kind: 'observed'; status: ObservedCaseStatus }
 >;
 
+type ManualLatest = Readonly<
+  | { kind: 'notProvided' | 'notRecorded' | 'notApplicable' }
+  | { kind: 'recorded'; outcome: ManualOutcome; commit: string; executedAt: string; executedBy?: string; changedSinceExecution: boolean }
+>;
+
 type Verification = Readonly<
-  | { kind: 'manual' }
+  | { kind: 'manual'; latest: ManualLatest }
   | { kind: 'automated'; source: Exclude<ReleaseCatalogCase['source'], 'manual'>; latest: LatestResult }
 >;
 
@@ -41,6 +48,7 @@ export type ReleaseDiffView = Readonly<{
 type ReleaseDiffInput = Readonly<{
   production: ReleaseCatalogSnapshot;
   staging: Readonly<{ snapshot: ReleaseCatalogSnapshot; latestRun?: TestRun }>;
+  manual?: Readonly<{ resultSets: ReadonlyArray<ManualResultSet>; snapshots: ReadonlyArray<ReleaseCatalogSnapshot> }>;
 }>;
 
 export type ReleaseDiffResult = Readonly<
@@ -78,9 +86,66 @@ const latestFor = (caseId: string, run: TestRun | undefined): LatestResult => {
   return { kind: 'notInRun' };
 };
 
-const verificationFor = (managedCase: ReleaseCatalogCase, run: TestRun | undefined, removed: boolean): Verification => {
-  if (managedCase.source === 'manual') return { kind: 'manual' };
+type ManualRecord = Readonly<{ set: ManualResultSet; result: ManualResultSet['results'][number]; executedCase: ReleaseCatalogCase }>;
+
+const manualLatestFor = (managedCase: ReleaseCatalogCase, records: ReadonlyMap<string, ManualRecord> | undefined, removed: boolean): ManualLatest => {
+  if (removed) return { kind: 'notApplicable' };
+  if (!records) return { kind: 'notProvided' };
+  const record = records.get(managedCase.id);
+  if (!record) return { kind: 'notRecorded' };
+  return {
+    kind: 'recorded',
+    outcome: record.result.outcome,
+    commit: record.set.commit,
+    executedAt: record.result.executedAt,
+    ...(record.set.executedBy === undefined ? {} : { executedBy: record.set.executedBy }),
+    changedSinceExecution: !sameCase(record.executedCase, managedCase),
+  };
+};
+
+const verificationFor = (managedCase: ReleaseCatalogCase, run: TestRun | undefined, removed: boolean, manualRecords?: ReadonlyMap<string, ManualRecord>): Verification => {
+  if (managedCase.source === 'manual') return { kind: 'manual', latest: manualLatestFor(managedCase, manualRecords, removed) };
   return { kind: 'automated', source: managedCase.source, latest: removed ? { kind: 'notApplicable' } : latestFor(managedCase.id, run) };
+};
+
+const collectManualRecords = (input: ReleaseDiffInput, problems: string[]): ReadonlyMap<string, ManualRecord> => {
+  const snapshots = new Map<string, ReleaseCatalogSnapshot>();
+  for (const snapshot of [input.production, input.staging.snapshot, ...(input.manual?.snapshots ?? [])]) {
+    const known = snapshots.get(snapshot.commit);
+    if (known && !sameReleaseCatalogContent(known, snapshot)) problems.push(`catalog snapshots for ${snapshot.commit} have different content`);
+    else if (!known) snapshots.set(snapshot.commit, snapshot);
+  }
+  const snapshotFor = (commit: string): ReleaseCatalogSnapshot | 'ambiguous' | undefined => {
+    const exact = snapshots.get(commit);
+    if (exact) return exact;
+    const candidates = [...snapshots.values()].filter((snapshot) => snapshot.commit.startsWith(commit) || commit.startsWith(snapshot.commit));
+    return candidates.length > 1 ? 'ambiguous' : candidates[0];
+  };
+  const records = new Map<string, ManualRecord>();
+  for (const set of input.manual?.resultSets ?? []) {
+    if (set.environment !== 'staging') {
+      problems.push(`manual result set for ${set.commit} must use the staging environment`);
+      continue;
+    }
+    const snapshot = snapshotFor(set.commit);
+    if (!snapshot || snapshot === 'ambiguous') {
+      problems.push(snapshot ? `manual result set commit ${set.commit} matches several catalog snapshots` : `manual result set for ${set.commit} has no catalog snapshot for that commit`);
+      continue;
+    }
+    for (const result of set.results) {
+      const executedCase = snapshot.cases.find((item) => item.id === result.caseId);
+      if (!executedCase) problems.push(`manual result for ${result.caseId} does not exist in the catalog at ${set.commit}`);
+      else if (executedCase.source !== 'manual') problems.push(`manual result for ${result.caseId} targets a ${executedCase.source} case at ${set.commit}`);
+      else {
+        const previous = records.get(result.caseId);
+        const order = previous ? Date.parse(result.executedAt) - Date.parse(previous.result.executedAt) : 1;
+        if (previous && order === 0 && (previous.result.outcome !== result.outcome || previous.set.commit !== set.commit)) {
+          problems.push(`manual results for ${result.caseId} at ${result.executedAt} disagree`);
+        } else if (order > 0) records.set(result.caseId, { set, result, executedCase });
+      }
+    }
+  }
+  return records;
 };
 
 export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => {
@@ -92,6 +157,7 @@ export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => 
   if (input.staging.latestRun) for (const problem of validateTestRunCatalog(input.staging.snapshot.cases, input.staging.latestRun)) {
     problems.push(`staging run ${describeTestRunCatalogProblem(problem)}`);
   }
+  const manualRecords = input.manual ? collectManualRecords(input, problems) : undefined;
   if (problems.length > 0) return { ok: false, problems };
 
   const previousById = new Map(input.production.cases.map((item) => [item.id, item]));
@@ -124,7 +190,7 @@ export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => 
       title: change.managedCase.title,
       layer: change.managedCase.layer,
       ...layerMove(change.managedCase),
-      verification: verificationFor(change.managedCase, input.staging.latestRun, change.kind === 'removed'),
+      verification: verificationFor(change.managedCase, input.staging.latestRun, change.kind === 'removed', manualRecords),
     };
     const existing = grouped.get(key);
     grouped.set(key, existing
@@ -152,7 +218,7 @@ export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => 
     const inventoryItem = {
       caseId: managedCase.id, title: managedCase.title, layer: managedCase.layer, ...layerMove(managedCase), definition: managedCase.status,
       change: change === 'added' || change === 'changed' ? change : 'unchanged',
-      verification: verificationFor(managedCase, input.staging.latestRun, false),
+      verification: verificationFor(managedCase, input.staging.latestRun, false, manualRecords),
     } as const;
     grouped.set(key, { ...group, inventory: [...group.inventory, inventoryItem] });
   }
