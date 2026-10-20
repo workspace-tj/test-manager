@@ -14,6 +14,8 @@ const resultLabel = (verification: ReleaseCaseChange['verification']): string =>
   return `自動 · ${verification.source} · ${suffix[latest.kind]}`;
 };
 
+const layerLabel = (item: Readonly<{ layer: string; previousLayer?: string }>): string => item.previousLayer === undefined ? item.layer : `${item.previousLayer} → ${item.layer}`;
+
 const renderGroup = (group: ReleaseDiffView['groups'][number]): string => {
   const path = group.featureId ? `${group.domainId} / ${group.featureId}` : group.domainId;
   const title = group.featureTitle ?? group.domainTitle;
@@ -21,9 +23,9 @@ const renderGroup = (group: ReleaseDiffView['groups'][number]): string => {
   const currentRows = group.inventory.map((item) => {
     const label = item.change === 'unchanged' ? '既存' : changeLabel[item.change];
     const labelClass = item.change === 'unchanged' ? 'neutral' : changeClass[item.change];
-    return `<li><div class="row-copy"><h3>${escapeHtml(item.title)}</h3><p><code>${escapeHtml(item.caseId)}</code> · ${escapeHtml(resultLabel(item.verification))}</p></div><div class="row-detail"><span class="label ${labelClass}">${label}</span>${item.definition === 'todo' ? '<span class="label warning">planned</span>' : ''}</div></li>`;
+    return `<li><div class="row-copy"><h3>${escapeHtml(item.title)}</h3><p><code>${escapeHtml(item.caseId)}</code> · ${escapeHtml(layerLabel(item))} · ${escapeHtml(resultLabel(item.verification))}</p></div><div class="row-detail"><span class="label ${labelClass}">${label}</span>${item.definition === 'todo' ? '<span class="label warning">planned</span>' : ''}</div></li>`;
   }).join('');
-  const removedRows = group.changes.filter((change) => change.kind === 'removed').map((change) => `<li><div class="row-copy"><h3>${escapeHtml(change.title)}</h3><p><code>${escapeHtml(change.caseId)}</code> · ${escapeHtml(resultLabel(change.verification))}</p></div><div class="row-detail"><span class="label neutral">削除</span></div></li>`).join('');
+  const removedRows = group.changes.filter((change) => change.kind === 'removed').map((change) => `<li><div class="row-copy"><h3>${escapeHtml(change.title)}</h3><p><code>${escapeHtml(change.caseId)}</code> · ${escapeHtml(layerLabel(change))} · ${escapeHtml(resultLabel(change.verification))}</p></div><div class="row-detail"><span class="label neutral">削除</span></div></li>`).join('');
   return `<article class="feature-card"><div class="feature-card-header"><div><p class="feature-path">${escapeHtml(path)}</p><h2>${escapeHtml(title)}</h2></div><dl class="compact-stats"><div><dt>追加</dt><dd>${count('added')}</dd></div><div><dt>変更</dt><dd>${count('changed')}</dd></div><div><dt>削除</dt><dd>${count('removed')}</dd></div></dl></div><ul class="grouped-list case-list">${currentRows}${removedRows}</ul></article>`;
 };
 

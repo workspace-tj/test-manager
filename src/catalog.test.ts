@@ -147,6 +147,19 @@ describe('project catalog', () => {
     expect(missing.some((item) => item.location.file.endsWith('.spec.ts'))).toBe(true);
   });
 
+  it('renders the case layer as a search filter, in result rows, and on case pages', async () => {
+    const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    if (!result.ok) throw new Error('fixture catalog must be valid');
+    const site = await renderSite(result.catalog);
+    const index = site.get('cases/index.html') ?? '';
+    expect(index).toMatch(/<span>テスト層<\/span><select id="layer-filter" data-filter-key="layer"><option value="">すべて<\/option><option value="e2e">e2e<\/option><option value="ui">ui<\/option><option value="unit">unit<\/option><\/select>/u);
+    const unitCase = result.catalog.cases.find((item) => item.layer === 'unit');
+    if (!unitCase) throw new Error('fixture must contain a unit case');
+    expect(index).toContain(`${unitCase.id} · unit · ${unitCase.source}`);
+    expect(index).toContain('&quot;layer&quot;:&quot;unit&quot;');
+    expect(site.get(`cases/${unitCase.id}.html`)).toContain(`<code>${unitCase.id}</code> · unit · ${unitCase.source}`);
+  });
+
   it('reports missing belongsTo and does not inherit it from a parent or path', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-invalid-'));
     await cp(fixture, root, { recursive: true });

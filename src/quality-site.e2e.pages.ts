@@ -97,6 +97,15 @@ class CatalogSearchPage extends DestinationPage {
     await expect(this.#page.locator('#result-summary')).toHaveText(`${count}ケース`);
   }
 
+  async filterByLayer(layer: string): Promise<void> {
+    await this.#page.getByLabel('テスト層').selectOption(layer);
+    const rows = this.#page.locator('[data-case-row]:visible');
+    await expect(rows.first()).toBeVisible();
+    expect(await rows.evaluateAll((items, selectedLayer) => items.every((item) => JSON.parse(item.getAttribute('data-filters') ?? '{}').layer === selectedLayer), layer)).toBe(true);
+    const total = await this.#page.locator('[data-case-row]').count();
+    expect(await rows.count()).toBeLessThan(total);
+  }
+
   async focusSearchWithKeyboard(): Promise<void> {
     await tabTo(this.#page, this.#page.getByRole('searchbox'));
   }

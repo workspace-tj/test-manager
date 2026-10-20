@@ -12,6 +12,12 @@ test('日次・リリース差分・ケース検索を移動してケースを�
   await qualitySite.catalog.expectVisibleCases(1);
 });
 
+test('テスト層でケースを絞り込める', async ({ qualitySite }) => {
+  await qualitySite.catalog.open();
+  await qualitySite.catalog.expectLoaded();
+  await qualitySite.catalog.filterByLayer('unit');
+});
+
 test('キーボードだけで主要画面とdomain絞り込みを操作できる', async ({ qualitySite }) => {
   await qualitySite.daily.open();
   await qualitySite.navigation.openReleaseWithKeyboard();
