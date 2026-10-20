@@ -19,6 +19,8 @@ import { renderQualitySite } from './quality-site.js';
 import { loadDashboardStyles } from './dashboard-styles.js';
 import type { CliArguments } from './cli-arguments.js';
 import { readJsonInput } from './cli-input.js';
+import { initProject } from './init.js';
+import { rulesJsonSchema } from './rules.js';
 
 export type CliOutput = Readonly<{
   log: (message: string) => void;
@@ -49,6 +51,26 @@ const loadManualEvidence = async (
 };
 
 export const executeCliCommand = async (parsed: CliArguments, output: CliOutput): Promise<number> => {
+  if (parsed.command === 'schema') {
+    output.log(JSON.stringify(rulesJsonSchema(), null, 2));
+    return 0;
+  }
+  if (parsed.command === 'init') {
+    const initialized = await initProject(parsed.dir, parsed.force);
+    if (!initialized.ok) {
+      output.error(initialized.reason);
+      return 1;
+    }
+    for (const file of initialized.written) output.log(`wrote ${file}`);
+    const checked = await checkProject(initialized.configPath);
+    if (!checked.ok) {
+      for (const item of checked.diagnostics) output.error(formatDiagnostic(item));
+      output.error(`init wrote ${initialized.written.length} file(s); check then failed with ${checked.diagnostics.length} diagnostic(s) in the project (for example, existing Markdown under knowledge/ without frontmatter)`);
+      return 1;
+    }
+    output.log(`init passed check: ${initialized.configPath}`);
+    return 0;
+  }
   if (parsed.command === 'release') {
     const productionSnapshotPath = parsed.productionSnapshot;
     const stagingSnapshotPath = parsed.stagingSnapshot;

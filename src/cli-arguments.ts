@@ -1,4 +1,6 @@
 export const cliUsage = `Usage:
+  test-manager init [--dir <path>] [--force]
+  test-manager schema
   test-manager check --config <path>
   test-manager build --config <path> --out <path>
   test-manager snapshot --config <path> --commit <sha> --out <path>
@@ -11,6 +13,8 @@ type CommonSiteOptions = Readonly<{ out: string; stylesheet?: string }>;
 type ManualEvidenceOptions = Readonly<{ manualResults: ReadonlyArray<string>; manualSnapshots: ReadonlyArray<string> }>;
 
 export type CliArguments =
+  | Readonly<{ command: 'init'; dir: string; force: boolean }>
+  | Readonly<{ command: 'schema' }>
   | Readonly<{ command: 'check'; config: string }>
   | Readonly<{ command: 'build'; config: string; out: string }>
   | Readonly<{ command: 'snapshot'; config: string; commit: string; out: string }>
@@ -18,7 +22,7 @@ export type CliArguments =
   | (Readonly<{ command: 'release'; productionSnapshot: string; stagingSnapshot: string; latestStagingRun?: string }> & CommonSiteOptions & ManualEvidenceOptions)
   | (Readonly<{ command: 'dashboard'; config: string; currentRun: string; previousRun?: string; productionSnapshot: string; stagingSnapshot: string; latestStagingRun?: string }> & CommonSiteOptions & ManualEvidenceOptions);
 
-type Command = CliArguments['command'];
+type Command = Exclude<CliArguments['command'], 'init' | 'schema'>;
 const allowedFlags: Readonly<Record<Command, ReadonlySet<string>>> = {
   check: new Set(['--config']),
   build: new Set(['--config', '--out']),
@@ -45,6 +49,21 @@ const collectFlags = (command: Command, args: ReadonlyArray<string>): ReadonlyMa
 
 export const parseCliArguments = (args: ReadonlyArray<string>): CliArguments | undefined => {
   const command = args[0];
+  if (command === 'schema') return args.length === 1 ? { command } : undefined;
+  if (command === 'init') {
+    let dir: string | undefined;
+    let force = false;
+    for (let index = 1; index < args.length; index += 1) {
+      const flag = args[index];
+      const next = args[index + 1];
+      if (flag === '--force' && !force) force = true;
+      else if (flag === '--dir' && dir === undefined && next && !next.startsWith('--')) {
+        dir = next;
+        index += 1;
+      } else return undefined;
+    }
+    return { command, dir: dir ?? '.', force };
+  }
   if (command !== 'check' && command !== 'build' && command !== 'snapshot' && command !== 'daily' && command !== 'release' && command !== 'dashboard') return undefined;
   const flags = collectFlags(command, args);
   if (!flags) return undefined;
