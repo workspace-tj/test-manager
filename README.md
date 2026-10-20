@@ -110,6 +110,10 @@ manifestにはrun ID、attempt、environment、commit、scope、開始時刻、H
 
 プロジェクトのルートなどに `test-manager.yaml` を作ります。glob の基準は、この設定ファイルが置かれたディレクトリです。
 
+`test-manager init [--dir <path>] [--force]` は、`check` が通る最小の `test-manager.yaml` と例の domain 文書 `knowledge/example.md` を作ります。既存の設定は `--force` を付けたときだけ上書きし、既存の文書は上書きしません。作成後に `check` を実行します。`knowledge/` にfrontmatterのないMarkdownが既にあるなど、プロジェクト側の理由で `check` が失敗した場合も、作成したファイルは残します。リポジトリの調査や設定の推測はしません。テストの置き場所に合わせた `discovery.sources` や文書の取り込みは、人やAIエージェントが行い、`check` の診断で確かめます。
+
+設定の構造は `test-manager schema` が出力するJSON Schema（[`schema/test-manager.schema.json`](schema/test-manager.schema.json)と同じ内容）で確認できます。kind名や `requiredWhen` の参照先など、複数の値にまたがる規則はJSON Schemaではなく `check` が検査します。parserを変更したら `pnpm schema` で再生成します。
+
 ```yaml
 version: 1
 idPattern: "^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$"

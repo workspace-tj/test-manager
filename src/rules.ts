@@ -107,6 +107,12 @@ const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z
 
 const RulesSchema = RulesShape.superRefine(validateRuleRelationships);
 
+export const rulesJsonSchema = (): Record<string, unknown> => ({
+  title: 'test-manager.yaml',
+  description: 'Structure of a test-manager project configuration. Rules that relate several values (document kinds, requiredWhen targets, required/requiredWhen exclusivity, reserved field names) are checked by `test-manager check`, not by this schema.',
+  ...z.toJSONSchema(RulesShape, { io: 'input' }),
+});
+
 const normalizeEnumValues = (
   values: Readonly<Record<string, Readonly<{ label?: string | undefined; description: string }>>>,
 ): Readonly<Record<string, Readonly<{ label?: string; description: string }>>> => Object.fromEntries(

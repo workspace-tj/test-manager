@@ -37,6 +37,16 @@ describe('CLI argument grammar', () => {
     });
   });
 
+  it('parses init and schema commands with their optional flags', () => {
+    expect(parseCliArguments(['init'])).toEqual({ command: 'init', dir: '.', force: false });
+    expect(parseCliArguments(['init', '--dir', 'consumer', '--force'])).toEqual({ command: 'init', dir: 'consumer', force: true });
+    expect(parseCliArguments(['init', '--force', '--force'])).toBeUndefined();
+    expect(parseCliArguments(['init', '--dir', '.', '--dir', 'x'])).toBeUndefined();
+    expect(parseCliArguments(['init', '--dir'])).toBeUndefined();
+    expect(parseCliArguments(['schema'])).toEqual({ command: 'schema' });
+    expect(parseCliArguments(['schema', '--out', 'x'])).toBeUndefined();
+  });
+
   it.each([
     ['unknown command', ['unknown']],
     ['missing flag value', ['check', '--config']],

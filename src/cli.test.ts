@@ -103,6 +103,23 @@ describe('CLI process boundary', () => {
     expect(await readFile(path.join(out, 'keep.txt'), 'utf8')).toBe('do not replace');
   });
 
+  it('initializes a checkable project, reports project-side check failures, and prints the schema', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-cli-init-'));
+    const created = await run(['init', '--dir', root]);
+    expect(created.code).toBe(0);
+    expect(created.stdout).toContain('init passed check');
+    const existing = path.join(root, 'existing');
+    await mkdir(path.join(existing, 'knowledge'), { recursive: true });
+    await writeFile(path.join(existing, 'knowledge/notes.md'), '# notes\n', 'utf8');
+    const failed = await run(['init', '--dir', existing]);
+    expect(failed.code).toBe(1);
+    expect(failed.stderr).toContain('TM100');
+    expect(failed.stderr).toContain('init wrote 2 file(s)');
+    const schema = await run(['schema']);
+    expect(schema.code).toBe(0);
+    expect(JSON.parse(schema.stdout)).toEqual(expect.objectContaining({ title: 'test-manager.yaml' }));
+  });
+
   it('builds a release catalog difference screen from production and staging inputs', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-cli-release-'));
     const out = path.join(root, 'release');
