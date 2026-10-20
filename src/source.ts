@@ -145,7 +145,7 @@ export const readTestSource = async (
         const id = caseIdSchema(new RegExp(rules.idPattern)).safeParse(rawId);
         if (rawId && !id.success) diagnostics.push(diagnostic('TM206', relative, rawId, 'case ID does not match idPattern', line));
         if (!before.value || (details.found && !details.value) || !id.success || shape.dynamicEach || extractedId.invalidMultiplicity || extractedId.unsupportedShape) return;
-        const fields = parseCaseFields({ ...before.value, ...details.value }, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
+        const fields = parseCaseFields({ ...before.value, ...details.value }, kind, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
         if (!fields.ok) {
           diagnostics.push(...fields.diagnostics);
           return;
@@ -194,7 +194,7 @@ export const readTestSource = async (
           const id = caseIdSchema(new RegExp(rules.idPattern)).safeParse(rawId);
           if (!id.success) diagnostics.push(diagnostic('TM206', relative, rawId, 'case ID does not match idPattern', variable.loc?.start.line ?? 1));
           if (!before.value || (details.found && !details.value) || !id.success || hasLegacyStoryId(variable.init) || ambiguous) continue;
-          const fields = parseCaseFields({ ...before.value, ...details.value }, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
+          const fields = parseCaseFields({ ...before.value, ...details.value }, kind, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
           if (!fields.ok) {
             diagnostics.push(...fields.diagnostics);
             continue;

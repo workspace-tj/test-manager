@@ -42,7 +42,8 @@ export type FieldRule = FieldRequiredness & Readonly<
   }
 > & Readonly<{ label?: string; placement: 'classification' | 'detail' }>;
 
-export type SourceKind = 'vitest' | 'playwright' | 'storybook';
+export const sourceKinds = ['vitest', 'playwright', 'storybook'] as const;
+export type SourceKind = typeof sourceKinds[number];
 export type ProjectRules = Readonly<{
   version: 1;
   idPattern: string;
@@ -69,7 +70,8 @@ export type KnowledgeDocument = Readonly<{
   fieldLocations?: Readonly<Record<string, Location>>;
 }>;
 
-export type CaseSource = 'manual' | SourceKind;
+export const caseSources = ['manual', ...sourceKinds] as const;
+export type CaseSource = typeof caseSources[number];
 export type CaseFields = Readonly<{ belongsTo: DocumentId; refs?: ReadonlyArray<DocumentId>; readonly [key: string]: unknown }>;
 type CaseBase = Readonly<{
   id: CaseId;

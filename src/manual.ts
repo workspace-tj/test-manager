@@ -35,7 +35,7 @@ export const readManualCase = async (
       return diagnostic(codes[String(item.path[0])] ?? 'TM130', relative, subject, item.message, fieldLine(source, subject));
     }) };
   }
-  const parsedFields = parseCaseFields(fields, rules.case.fields, documents, new RegExp(rules.idPattern), relative);
+  const parsedFields = parseCaseFields(fields, 'manual', rules.case.fields, documents, new RegExp(rules.idPattern), relative);
   if (!parsedFields.ok) return { diagnostics: parsedFields.diagnostics.map((item) => ({ ...item, location: location(relative, fieldLine(source, item.subject), 1) })) };
   const separated = partitionCaseFields(parsedFields.fields, rules.case.fields);
   return { managedCase: { id: fixed.data.id, title: fixed.data.title, source: 'manual', status: 'active', fields: separated.classification, details: separated.details, procedure: fixed.data.steps, location: location(relative), snippet: source }, diagnostics: [] };

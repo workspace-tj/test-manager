@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { diagnostic } from './diagnostics.js';
-import type { Diagnostic, FieldRule, ProjectRules } from './model.js';
+import { caseSources, sourceKinds, type Diagnostic, type FieldRule, type ProjectRules } from './model.js';
 import { parseStrictYaml, yamlPathLine } from './yaml.js';
 
 const KindRuleSchema = z.object({
@@ -45,7 +45,7 @@ const RulesShape = z.object({
     documents: z.array(z.string().min(1)).min(1),
     manualCases: z.array(z.string().min(1)),
     sources: z.array(z.object({
-      kind: z.enum(['vitest', 'playwright', 'storybook']),
+      kind: z.enum(sourceKinds),
       paths: z.array(z.string().min(1)).min(1),
     }).strict()),
   }).strict(),
@@ -68,7 +68,9 @@ const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z
   if (refs && refs.type !== 'reference-list') context.addIssue({ code: 'custom', path: ['case', 'fields', 'refs'], message: 'refs must be a reference-list field' });
   if (refs?.placement === 'detail') context.addIssue({ code: 'custom', path: ['case', 'fields', 'refs', 'placement'], message: 'refs must be a classification field' });
   for (const [name, field] of Object.entries(rules.case.fields)) {
-    if (field.requiredWhen) {
+    if (field.requiredWhen?.field === 'source') {
+      if (!(caseSources as ReadonlyArray<unknown>).includes(field.requiredWhen.equals)) context.addIssue({ code: 'custom', path: ['case', 'fields', name, 'requiredWhen', 'equals'], message: `source must be one of ${caseSources.join(', ')}` });
+    } else if (field.requiredWhen) {
       const conditionField = rules.case.fields[field.requiredWhen.field];
       if (conditionField === undefined) {
         context.addIssue({ code: 'custom', path: ['case', 'fields', name, 'requiredWhen', 'field'], message: `unknown condition field ${field.requiredWhen.field}` });

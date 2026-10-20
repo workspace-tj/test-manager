@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { documentIdSchema } from './ids.js';
-import type { CaseFields, Diagnostic, FieldRule, KnowledgeDocument, Location } from './model.js';
+import type { CaseFields, CaseSource, Diagnostic, FieldRule, KnowledgeDocument, Location } from './model.js';
 import { diagnostic } from './diagnostics.js';
 
 type ParsedCaseFields = Readonly<
@@ -48,6 +48,7 @@ const diagnosticReason = (item: z.core.$ZodIssue): string => item.message.replac
 
 export const parseCaseFields = (
   input: unknown,
+  source: CaseSource,
   rules: Readonly<Record<string, FieldRule>>,
   documents: ReadonlyArray<KnowledgeDocument>,
   idPattern: RegExp,
@@ -63,7 +64,7 @@ export const parseCaseFields = (
   for (const [name, rule] of Object.entries(rules)) shape[name] = rule.required ? schemaFor(rule, idPattern) : schemaFor(rule, idPattern).optional();
   const schema = z.strictObject(shape).superRefine((fields, context) => {
     for (const [name, rule] of Object.entries(rules)) {
-      if (rule.requiredWhen && fields[name] === undefined && fields[rule.requiredWhen.field] === rule.requiredWhen.equals) {
+      if (rule.requiredWhen && fields[name] === undefined && (rule.requiredWhen.field === 'source' ? source : fields[rule.requiredWhen.field]) === rule.requiredWhen.equals) {
         context.addIssue({ code: 'custom', path: [name], message: `TM121 required when ${rule.requiredWhen.field} equals ${JSON.stringify(rule.requiredWhen.equals)}` });
       }
     }
@@ -98,8 +99,9 @@ export const validateCaseFields = (
   rules: Readonly<Record<string, FieldRule>>,
   documents: ReadonlyArray<KnowledgeDocument>,
   file: string,
+  source: CaseSource = 'manual',
 ): ReadonlyArray<Diagnostic> => {
-  const parsed = parseCaseFields(fields, rules, documents, /.*/u, file);
+  const parsed = parseCaseFields(fields, source, rules, documents, /.*/u, file);
   return parsed.ok ? [] : parsed.diagnostics;
 };
 
