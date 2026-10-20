@@ -9,6 +9,9 @@ import { buildReleaseDiff } from './release-diff.js';
 import { renderReleaseSite } from './release-site.js';
 import { createReleaseCatalogSnapshot, parseReleaseCatalogSnapshot, sameReleaseCatalogContent } from './release-catalog.js';
 import { describeTestRunCatalogProblem } from './test-run-catalog.js';
+import { parseManualResultSet } from './manual-result.js';
+import type { ManualResultSet } from './manual-result.js';
+import type { ReleaseCatalogSnapshot } from './release-catalog.js';
 import { writeSite } from './site.js';
 import { assembleTestRun } from './test-run-assembly.js';
 import { parseTestRun } from './test-run.js';
@@ -21,6 +24,29 @@ export type CliOutput = Readonly<{
   log: (message: string) => void;
   error: (message: string) => void;
 }>;
+
+const loadManualEvidence = async (
+  options: Readonly<{ manualResults: ReadonlyArray<string>; manualSnapshots: ReadonlyArray<string> }>,
+  idPattern: RegExp,
+): Promise<Readonly<{ resultSets: ReadonlyArray<ManualResultSet>; snapshots: ReadonlyArray<ReleaseCatalogSnapshot> }> | undefined> => {
+  if (options.manualResults.length === 0) {
+    if (options.manualSnapshots.length > 0) throw new Error('--manual-snapshot requires --manual-results');
+    return undefined;
+  }
+  const [resultSets, snapshots] = await Promise.all([
+    Promise.all(options.manualResults.map(async (file) => {
+      const parsed = parseManualResultSet(await readJsonInput(file, 'manual result set'), idPattern);
+      if (!parsed.success) throw new Error(`invalid manual result set ${file}: ${parsed.error.message}`);
+      return parsed.data;
+    })),
+    Promise.all(options.manualSnapshots.map(async (file) => {
+      const parsed = parseReleaseCatalogSnapshot(await readJsonInput(file, 'manual catalog snapshot'));
+      if (!parsed.success) throw new Error(`invalid manual catalog snapshot ${file}: ${parsed.error.message}`);
+      return parsed.data;
+    })),
+  ]);
+  return { resultSets, snapshots };
+};
 
 export const executeCliCommand = async (parsed: CliArguments, output: CliOutput): Promise<number> => {
   if (parsed.command === 'release') {
@@ -37,9 +63,11 @@ export const executeCliCommand = async (parsed: CliArguments, output: CliOutput)
       ? parseTestRun(await readJsonInput(stagingRunPath, 'latest staging TestRun'), new RegExp(staging.data.idPattern, 'u'))
       : undefined;
     if (stagingRun && !stagingRun.success) throw new Error(`invalid staging TestRun: ${stagingRun.error.message}`);
+    const manual = await loadManualEvidence(parsed, new RegExp(staging.data.idPattern, 'u'));
     const diff = buildReleaseDiff({
       production: production.data,
       staging: { snapshot: staging.data, ...(stagingRun?.data ? { latestRun: stagingRun.data } : {}) },
+      ...(manual ? { manual } : {}),
     });
     if (!diff.ok) throw new Error(`invalid release comparison: ${diff.problems.join('; ')}`);
     const stylesheet = await loadDashboardStyles(parsed.stylesheet);
@@ -89,7 +117,8 @@ export const executeCliCommand = async (parsed: CliArguments, output: CliOutput)
     if (!sameReleaseCatalogContent(configuredSnapshot, staging.data)) throw new Error('staging catalog snapshot does not match the configured catalog');
     const daily = buildDailyView(result.catalog, currentRun.data, previousRun?.data);
     if (!daily.ok) throw new Error(`daily view contains invalid run cases: ${daily.problems.map(describeTestRunCatalogProblem).join('; ')}`);
-    const release = buildReleaseDiff({ production: production.data, staging: { snapshot: staging.data, ...(latestStagingRun?.data ? { latestRun: latestStagingRun.data } : {}) } });
+    const manual = await loadManualEvidence(parsed, idPattern);
+    const release = buildReleaseDiff({ production: production.data, staging: { snapshot: staging.data, ...(latestStagingRun?.data ? { latestRun: latestStagingRun.data } : {}) }, ...(manual ? { manual } : {}) });
     if (!release.ok) throw new Error(`invalid release comparison: ${release.problems.join('; ')}`);
     await writeManagedFiles(renderQualitySite(result.catalog, daily.view, release.view, stylesheet), parsed.out, result.catalog.projectRoot, 'quality-site-v1\n');
     output.log(`dashboard build passed: ${parsed.out}`);
