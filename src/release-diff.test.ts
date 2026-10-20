@@ -105,15 +105,22 @@ describe('release catalog difference', () => {
     const checked = await checkProject(path.resolve('fixtures/quality-dashboard/test-manager.yaml'));
     if (!checked.ok) throw new Error('fixture catalog must be valid');
     const staging = createReleaseCatalogSnapshot(checked.catalog, '7f3a12c');
-    const runFor = (runner: 'vitest' | 'playwright', caseId: string) => parseTestRun({
+    const runFor = (runner: 'vitest' | 'playwright', caseId: string, layer = 'e2e') => parseTestRun({
       schemaVersion: 1, runId: 'latest', attempt: 1, environment: 'staging', commit: '7f3a12c', scopeId: 'release',
       startedAt: '2026-09-13T00:00:00Z', completedAt: '2026-09-13T00:01:00Z', ciUrl: 'https://example.com/run',
-      units: [{ state: 'incomplete', reason: 'runnerError', unitId: 'unit', runner, layer: 'E2E', target: 'node', plannedCaseIds: [caseId], observations: [] }],
+      units: [{ state: 'incomplete', reason: 'runnerError', unitId: 'unit', runner, layer, target: 'node', plannedCaseIds: [caseId], observations: [] }],
     }, /^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$/u);
     const mismatch = runFor('playwright', 'CASE-101');
     const unknown = runFor('vitest', 'CASE-999');
     if (!mismatch.success || !unknown.success) throw new Error('run fixture must parse');
     expect(buildReleaseDiff({ production: createReleaseCatalogSnapshot(checked.catalog, '6e2b11a'), staging: { snapshot: staging, latestRun: mismatch.data } }).ok).toBe(false);
     expect(buildReleaseDiff({ production: createReleaseCatalogSnapshot(checked.catalog, '6e2b11a'), staging: { snapshot: staging, latestRun: unknown.data } }).ok).toBe(false);
+    const target = staging.cases.find((item) => item.source === 'vitest');
+    if (!target) throw new Error('fixture must contain a vitest case');
+    const relabeled = runFor('vitest', target.id, 'integration');
+    if (!relabeled.success) throw new Error('run fixture must parse');
+    expect(buildReleaseDiff({ production: createReleaseCatalogSnapshot(checked.catalog, '6e2b11a'), staging: { snapshot: staging, latestRun: relabeled.data } })).toEqual({
+      ok: false, problems: [`staging run unit layer integration does not match case ${target.id} layer ${target.layer}`],
+    });
   });
 });

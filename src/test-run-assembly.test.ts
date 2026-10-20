@@ -19,7 +19,7 @@ const manifest = {
   }, {
     unitId: 'playwright-e2e-chromium',
     runner: 'playwright',
-    layer: 'E2E',
+    layer: 'e2e',
     target: 'chromium',
     plannedCaseIds: ['CASE-002'],
   }],

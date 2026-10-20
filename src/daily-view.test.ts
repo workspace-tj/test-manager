@@ -2,6 +2,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { checkProject } from './catalog.js';
 import { buildDailyView } from './daily-view.js';
+import { describeTestRunCatalogProblem } from './test-run-catalog.js';
 import { parseTestRun } from './test-run.js';
 import type { TestRun } from './test-run.js';
 
@@ -31,7 +32,7 @@ const run = (
         observations: observations.map((item) => ({ caseId: item.caseId, expected: 'passed', attemptCoverage: { kind: 'complete' }, attempts: [attempt(item.outcome)] })),
       },
       ...(incomplete.length === 0 ? [] : [{
-        state: 'incomplete' as const, unitId: 'playwright-e2e', runner: 'playwright' as const, layer: 'E2E', target: 'chromium', reason: 'runnerError' as const,
+        state: 'incomplete' as const, unitId: 'playwright-e2e', runner: 'playwright' as const, layer: 'e2e', target: 'chromium', reason: 'runnerError' as const,
         plannedCaseIds: incomplete, observations: [],
       }]),
     ],
@@ -101,6 +102,17 @@ describe('daily view', () => {
     if (!catalog.ok) throw new Error('fixture must be valid');
     const result = buildDailyView(catalog.catalog, run('current', [{ caseId: 'CASE-999', outcome: 'passed' }]));
     expect(result).toEqual({ ok: false, problems: [{ kind: 'unknownCase', caseId: 'CASE-999' }] });
+  });
+
+  it('rejects a run unit whose layer does not match the catalog case layer', async () => {
+    const catalog = await checkProject(path.resolve('fixtures/valid/test-manager.yaml'));
+    if (!catalog.ok) throw new Error('fixture must be valid');
+    const current = run('current', [{ caseId: 'CASE-001', outcome: 'passed' }]);
+    const relabeled = { ...current, units: current.units.map((unit) => ({ ...unit, layer: 'integration' })) };
+    const result = buildDailyView(catalog.catalog, relabeled);
+    expect(result).toEqual({ ok: false, problems: [{ kind: 'layerMismatch', caseId: 'CASE-001', unitLayer: 'integration', caseLayer: 'unit' }] });
+    if (result.ok) return;
+    expect(result.problems.map(describeTestRunCatalogProblem)).toEqual(['unit layer integration does not match case CASE-001 layer unit']);
   });
 
   it('rejects a run unit whose runner does not match the catalog source', async () => {

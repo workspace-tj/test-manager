@@ -147,7 +147,7 @@ describe('normalized test run', () => {
         state: 'incomplete',
         unitId: 'playwright-e2e-chromium',
         runner: 'playwright',
-        layer: 'E2E',
+        layer: 'e2e',
         target: 'chromium',
         reason: 'runnerError',
         plannedCaseIds: ['CASE-001', 'CASE-002'],

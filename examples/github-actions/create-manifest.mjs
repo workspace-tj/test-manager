@@ -22,11 +22,14 @@ const { parseTestRunManifest } = await import(pathToFileURL(path.join(toolDirect
 
 const unitFor = (runner, cases) => {
   const upper = runner.toUpperCase();
-  const plannedCaseIds = cases.filter((item) => item.source === runner).map((item) => item.id);
+  const runnerCases = cases.filter((item) => item.source === runner);
+  const plannedCaseIds = runnerCases.map((item) => item.id);
+  const layers = [...new Set(runnerCases.map((item) => item.layer))];
+  if (layers.length > 1) throw new Error(`${runner} cases span layers ${layers.join(', ')}; run one unit per layer`);
   return plannedCaseIds.length === 0 ? [] : [{
     unitId: required(`TM_${upper}_UNIT_ID`),
     runner,
-    layer: required(`TM_${upper}_LAYER`),
+    layer: layers[0],
     target: required(`TM_${upper}_TARGET`),
     plannedCaseIds,
   }];
@@ -35,8 +38,8 @@ const unitFor = (runner, cases) => {
 const catalogFile = path.resolve(option('--catalog'));
 const outputFile = path.resolve(option('--out'));
 const catalog = JSON.parse(await readFile(catalogFile, 'utf8'));
-if (!catalog || !Array.isArray(catalog.cases) || catalog.cases.some((item) => !item || typeof item.id !== 'string' || typeof item.source !== 'string')) {
-  throw new Error('catalog must contain cases with string id and source');
+if (!catalog || !Array.isArray(catalog.cases) || catalog.cases.some((item) => !item || typeof item.id !== 'string' || typeof item.source !== 'string' || typeof item.layer !== 'string')) {
+  throw new Error('catalog must contain cases with string id, source, and layer');
 }
 
 const attempt = Number(required('TM_RUN_ATTEMPT'));

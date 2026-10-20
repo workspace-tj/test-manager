@@ -8,6 +8,7 @@ import { writeManagedFiles } from './managed-output.js';
 import { buildReleaseDiff } from './release-diff.js';
 import { renderReleaseSite } from './release-site.js';
 import { createReleaseCatalogSnapshot, parseReleaseCatalogSnapshot, sameReleaseCatalogContent } from './release-catalog.js';
+import { describeTestRunCatalogProblem } from './test-run-catalog.js';
 import { writeSite } from './site.js';
 import { assembleTestRun } from './test-run-assembly.js';
 import { parseTestRun } from './test-run.js';
@@ -87,7 +88,7 @@ export const executeCliCommand = async (parsed: CliArguments, output: CliOutput)
     const configuredSnapshot = createReleaseCatalogSnapshot(result.catalog, staging.data.commit);
     if (!sameReleaseCatalogContent(configuredSnapshot, staging.data)) throw new Error('staging catalog snapshot does not match the configured catalog');
     const daily = buildDailyView(result.catalog, currentRun.data, previousRun?.data);
-    if (!daily.ok) throw new Error(`daily view contains invalid run cases: ${daily.problems.map((problem) => problem.caseId).join(', ')}`);
+    if (!daily.ok) throw new Error(`daily view contains invalid run cases: ${daily.problems.map(describeTestRunCatalogProblem).join('; ')}`);
     const release = buildReleaseDiff({ production: production.data, staging: { snapshot: staging.data, ...(latestStagingRun?.data ? { latestRun: latestStagingRun.data } : {}) } });
     if (!release.ok) throw new Error(`invalid release comparison: ${release.problems.join('; ')}`);
     await writeManagedFiles(renderQualitySite(result.catalog, daily.view, release.view, stylesheet), parsed.out, result.catalog.projectRoot, 'quality-site-v1\n');
@@ -107,7 +108,7 @@ export const executeCliCommand = async (parsed: CliArguments, output: CliOutput)
     const previousResult = parsed.previousRun ? parseTestRun(await readJsonInput(parsed.previousRun, 'previous TestRun'), idPattern) : undefined;
     if (previousResult && !previousResult.success) throw new Error(`invalid previous TestRun: ${previousResult.error.message}`);
     const view = buildDailyView(result.catalog, currentResult.data, previousResult?.data);
-    if (!view.ok) throw new Error(`daily view contains unknown case IDs: ${view.problems.map((problem) => problem.caseId).join(', ')}`);
+    if (!view.ok) throw new Error(`daily view contains invalid run cases: ${view.problems.map(describeTestRunCatalogProblem).join('; ')}`);
     const stylesheet = await loadDashboardStyles(parsed.stylesheet);
     await writeManagedFiles(renderDailySite(view.view, stylesheet), parsed.out, result.catalog.projectRoot, 'daily-v1\n');
     output.log(`daily build passed: ${parsed.out}`);

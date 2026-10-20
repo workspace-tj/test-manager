@@ -22,10 +22,10 @@ jobs:
       TM_SCOPE_ID: daily-all
       TM_ID_PATTERN: ^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$
       TM_VITEST_UNIT_ID: vitest-unit-node
+      # Vitest reporterの必須オプション。TestRunのunit layerはcatalogのlayerから決まり、この値は使われない
       TM_VITEST_LAYER: unit
       TM_VITEST_TARGET: node
       TM_PLAYWRIGHT_UNIT_ID: playwright-e2e-chromium
-      TM_PLAYWRIGHT_LAYER: E2E
       TM_PLAYWRIGHT_TARGET: chromium
     steps:
       - name: Checkout current commit
