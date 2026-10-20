@@ -101,6 +101,7 @@ export const readTestSource = async (
   file: string,
   projectRoot: string,
   kind: SourceKind,
+  layer: string,
   rules: ProjectRules,
   documents: ReadonlyArray<KnowledgeDocument>,
 ): Promise<Readonly<{ cases: ReadonlyArray<ManagedCase>; diagnostics: ReadonlyArray<Diagnostic> }>> => {
@@ -145,14 +146,14 @@ export const readTestSource = async (
         const id = caseIdSchema(new RegExp(rules.idPattern)).safeParse(rawId);
         if (rawId && !id.success) diagnostics.push(diagnostic('TM206', relative, rawId, 'case ID does not match idPattern', line));
         if (!before.value || (details.found && !details.value) || !id.success || shape.dynamicEach || extractedId.invalidMultiplicity || extractedId.unsupportedShape) return;
-        const fields = parseCaseFields({ ...before.value, ...details.value }, kind, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
+        const fields = parseCaseFields({ ...before.value, ...details.value }, { source: kind, layer }, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
         if (!fields.ok) {
           diagnostics.push(...fields.diagnostics);
           return;
         }
         const endLine = call.loc?.end.line ?? line;
         const separated = partitionCaseFields(fields.fields, rules.case.fields);
-        const base = { id: id.data, title, fields: separated.classification, details: separated.details, location: location(relative, line), snippet: source.split(/\r?\n/u).slice(line - 1, endLine).join('\n') };
+        const base = { id: id.data, title, layer, fields: separated.classification, details: separated.details, location: location(relative, line), snippet: source.split(/\r?\n/u).slice(line - 1, endLine).join('\n') };
         if (kind === 'vitest') cases.push({ ...base, source: 'vitest', status: runnerSourceAdapter('vitest').status(shape.name), ...(shape.parameters ? { parameters: shape.parameters } : {}) });
         else cases.push({ ...base, source: 'playwright', status: runnerSourceAdapter('playwright').status(shape.name) });
       },
@@ -194,7 +195,7 @@ export const readTestSource = async (
           const id = caseIdSchema(new RegExp(rules.idPattern)).safeParse(rawId);
           if (!id.success) diagnostics.push(diagnostic('TM206', relative, rawId, 'case ID does not match idPattern', variable.loc?.start.line ?? 1));
           if (!before.value || (details.found && !details.value) || !id.success || hasLegacyStoryId(variable.init) || ambiguous) continue;
-          const fields = parseCaseFields({ ...before.value, ...details.value }, kind, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
+          const fields = parseCaseFields({ ...before.value, ...details.value }, { source: kind, layer }, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
           if (!fields.ok) {
             diagnostics.push(...fields.diagnostics);
             continue;
@@ -202,7 +203,7 @@ export const readTestSource = async (
           const tags = objectProperty(variable.init, 'tags')?.value;
           const skipped = t.isArrayExpression(tags) && tags.elements.some((tag) => stringValue(tag) === 'skip-test');
           const separated = partitionCaseFields(fields.fields, rules.case.fields);
-          cases.push({ id: id.data, title: nameMatch[2] ?? rawName, source: 'storybook', status: skipped ? 'skip' : 'active', fields: separated.classification, details: separated.details, location: location(relative, variable.loc?.start.line ?? 1), snippet: source.split(/\r?\n/u).slice((variable.loc?.start.line ?? 1) - 1, variable.loc?.end.line ?? variable.loc?.start.line ?? 1).join('\n') });
+          cases.push({ id: id.data, title: nameMatch[2] ?? rawName, layer, source: 'storybook', status: skipped ? 'skip' : 'active', fields: separated.classification, details: separated.details, location: location(relative, variable.loc?.start.line ?? 1), snippet: source.split(/\r?\n/u).slice((variable.loc?.start.line ?? 1) - 1, variable.loc?.end.line ?? variable.loc?.start.line ?? 1).join('\n') });
     }
   }
   return { cases, diagnostics };

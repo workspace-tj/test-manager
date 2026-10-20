@@ -7,6 +7,7 @@ const fieldsSchema = z.object({ belongsTo: IdentifierSchema, refs: z.array(Ident
 const caseBase = {
   id: IdentifierSchema,
   title: z.string().min(1),
+  layer: z.string().min(1),
   fields: fieldsSchema,
   details: z.record(z.string(), z.unknown()),
 };
@@ -18,7 +19,7 @@ const releaseCaseSchema = z.discriminatedUnion('source', [
 ]);
 
 const snapshotShape = z.strictObject({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2, { error: 'schemaVersion must be 2; snapshots from older test-manager versions lack case layers, so regenerate them with the current snapshot command' }),
   commit: CommitSchema,
   idPattern: z.string().min(1),
   documents: z.array(z.strictObject({
@@ -57,6 +58,7 @@ const semanticCase = (managedCase: ManagedCase): ReleaseCatalogCase => {
   const base = {
     id: managedCase.id,
     title: managedCase.title,
+    layer: managedCase.layer,
     fields: { ...fieldsWithoutRefs, ...(refs === undefined ? {} : { refs: [...refs] }) },
     details: { ...managedCase.details },
   };
@@ -69,7 +71,7 @@ const semanticCase = (managedCase: ManagedCase): ReleaseCatalogCase => {
 };
 
 export const createReleaseCatalogSnapshot = (catalog: Catalog, commit: string): ReleaseCatalogSnapshot => snapshotShape.parse({
-  schemaVersion: 1,
+  schemaVersion: 2,
   commit,
   idPattern: catalog.rules.idPattern,
   documents: catalog.documents.map((document) => ({

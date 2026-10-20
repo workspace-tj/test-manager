@@ -96,13 +96,18 @@ idPattern: "^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$"
 
 discovery:
   documents: ["knowledge/**/*.md"]
-  manualCases: ["knowledge/**/*.manual.yaml"]
   sources:
+    - kind: manual
+      layer: e2e
+      paths: ["knowledge/**/*.manual.yaml"]
     - kind: vitest
+      layer: unit
       paths: ["src/**/*.test.ts"]
     - kind: playwright
+      layer: e2e
       paths: ["journeys/**/*.spec.ts"]
     - kind: storybook
+      layer: ui
       paths: ["src/**/*.stories.tsx"]
 
 documents:
@@ -153,8 +158,12 @@ case:
 どのファイルを読み取るかを指定します。
 
 - `documents`: YAML frontmatter を持つ Markdown
-- `manualCases`: 1 ファイルに 1 ケースを記述した YAML
-- `sources`: `vitest`、`playwright`、`storybook` と、それぞれの glob
+- `sources`: ケースを読み取るファイル。各行に `kind`、`layer`、`paths` を指定します
+  - `kind`: 記述方式。`manual`（1 ファイルに 1 ケースを記述した YAML）、`vitest`、`playwright`、`storybook`
+  - `layer`: そのファイル群が確かめるテスト層。`unit`、`integration`、`e2e` などプロジェクトで自由に名付けます。省略できません
+  - 同じ `kind` を複数行に分け、パスで層を分けられます。たとえば integration テストを `*.integration.test.ts` とする場合、unit 側は `src/**/!(*.integration).test.ts` のように除外して重複を避けます
+
+以前の `manualCases` は廃止しました。`sources` に `kind: manual` と `layer` を指定した行へ移してください。
 
 設定した glob が 1 件も見つからない場合や、一つのファイルが複数の設定に重複して一致した場合は診断します。
 
@@ -168,7 +177,7 @@ case:
 
 プロジェクトで各ケースに記録する項目を定義します。フィールド名は固定されていませんが、`belongsTo` は必須の参照項目です。
 
-利用できる型は `reference`、`reference-list`、`enum`、`integer-enum`、`text`、`text-list` です。`required`、条件付き必須の `requiredWhen`、`minItems`、`uniqueItems` も設定できます。`requiredWhen` の `field` には他のcase項目のほか `source` を指定でき、`equals: playwright` のようにケースの取得元（`manual`、`vitest`、`playwright`、`storybook`）で必須を切り替えられます。安定した英語のfield keyやenum valueを変えずに、任意の`label`で画面上の日本語表示名を指定できます。
+利用できる型は `reference`、`reference-list`、`enum`、`integer-enum`、`text`、`text-list` です。`required`、条件付き必須の `requiredWhen`、`minItems`、`uniqueItems` も設定できます。`requiredWhen` の `field` には他のcase項目のほか `source` と `layer` を指定できます。`equals: playwright` のようにケースの記述方式（`manual`、`vitest`、`playwright`、`storybook`）で、`equals: e2e` のように `discovery.sources` で定義したテスト層で必須を切り替えられます。安定した英語のfield keyやenum valueを変えずに、任意の`label`で画面上の日本語表示名を指定できます。
 
 `placement` は記述場所とサイト上での扱いを決めます。
 

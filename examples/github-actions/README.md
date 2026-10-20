@@ -12,6 +12,10 @@
 4. 下記のreporter設定を既存のVitest・Playwright設定へ組み込みます。
 5. workflow内の`pnpm vitest run`と`pnpm playwright test --project=chromium`を、consumerで普段使う実行コマンドへ必要に応じて置き換えます。Playwrightのproject名を変える場合は`TM_PLAYWRIGHT_TARGET`も同じ実行対象を表す値へ揃えます。
 
+production snapshotも、指定した`TEST_MANAGER_REF`のtest-managerで`TEST_MANAGER_PRODUCTION_REF`時点の`test-manager.yaml`を読み直して生成します。そのため、test-managerを設定形式が変わる版へ上げるときは、production側の`test-manager.yaml`も新形式へ移行してから参照を更新します。たとえば`discovery.sources`へ`layer`を必須化した版では、`manualCases`を残したproduction設定はsnapshot生成で失敗します。
+
+workflowの`TM_VITEST_LAYER`・`TM_PLAYWRIGHT_LAYER`は実行unitのlayerであり、現時点では`test-manager.yaml`の`discovery.sources[].layer`と照合しません。この例はrunnerごとに1unitへまとめるため、同じrunnerを複数layerへ分けて定義する場合は、unitもlayerごとに分けて実行するよう例を拡張してください。
+
 どちらの参照もbranchやtagではなくfull SHAに固定します。production checkoutはconsumerのworkspace外へ作成するため、current catalogのglobやテスト探索へproduction側のファイルは混入しません。
 
 ## Reporter設定

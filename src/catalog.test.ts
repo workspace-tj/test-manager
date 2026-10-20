@@ -80,7 +80,7 @@ describe('project catalog', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-alternate-project-'));
     const config = (await readFile(path.resolve('fixtures/alternate-rules.yaml'), 'utf8'))
       .replace('fixtures/none/**/*.md', 'knowledge/**/*.md')
-      .replace('manualCases: []', 'manualCases: ["knowledge/**/*.manual.yaml"]');
+      .replace('sources: []', 'sources:\n    - { kind: manual, layer: manual, paths: ["knowledge/**/*.manual.yaml"] }');
     await import('node:fs/promises').then(({ mkdir }) => mkdir(path.join(root, 'knowledge'), { recursive: true }));
     await writeFile(path.join(root, 'test-manager.yaml'), config, 'utf8');
     await writeFile(path.join(root, 'knowledge/module.md'), `---\nid: MOD-1\nkind: module\ntitle: Module one\n---\n`, 'utf8');
@@ -110,6 +110,41 @@ describe('project catalog', () => {
     const missing = result.diagnostics.filter((item) => item.code === 'TM121' && item.subject === 'sourceNote');
     expect(missing.length).toBeGreaterThan(0);
     expect(missing.every((item) => filePattern.test(item.location.file))).toBe(true);
+  });
+
+  it('assigns each case the layer of the discovery source that found it', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-layer-split-'));
+    await cp(fixture, root, { recursive: true });
+    await cp(path.join(root, 'src/cancel.test.ts'), path.join(root, 'src/cancel.integration.test.ts'));
+    const integrationFile = path.join(root, 'src/cancel.integration.test.ts');
+    await writeFile(integrationFile, (await readFile(integrationFile, 'utf8')).replace(/CASE-(\d{3})/gu, (_, digits: string) => `CASE-${String(Number(digits) + 500).padStart(3, '0')}`), 'utf8');
+    const config = path.join(root, 'test-manager.yaml');
+    await writeFile(config, (await readFile(config, 'utf8')).replace(
+      '    - kind: vitest\n      layer: unit\n      paths: ["src/**/*.test.ts"]',
+      '    - kind: vitest\n      layer: unit\n      paths: ["src/**/!(*.integration).test.ts"]\n    - kind: vitest\n      layer: integration\n      paths: ["src/**/*.integration.test.ts"]',
+    ), 'utf8');
+    const result = await checkProject(config);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const layers = new Map(result.catalog.cases.map((item) => [item.location.file, `${item.source}/${item.layer}`]));
+    expect(layers.get('src/cancel.test.ts')).toBe('vitest/unit');
+    expect(layers.get('src/cancel.integration.test.ts')).toBe('vitest/integration');
+    expect([...layers.entries()].find(([file]) => file.endsWith('.manual.yaml'))?.[1]).toBe('manual/e2e');
+  });
+
+  it('requires a field only for cases in the layer named by requiredWhen', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-layer-condition-'));
+    await cp(fixture, root, { recursive: true });
+    const config = path.join(root, 'test-manager.yaml');
+    await writeFile(config, (await readFile(config, 'utf8')).replace('    reason: {', '    layerNote: { required: false, placement: detail, type: text, requiredWhen: { field: layer, equals: e2e } }\n    reason: {'), 'utf8');
+    const result = await checkProject(config);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const missing = result.diagnostics.filter((item) => item.code === 'TM121' && item.subject === 'layerNote');
+    expect(missing.length).toBeGreaterThan(0);
+    expect(missing.every((item) => /\.(?:manual\.yaml|spec\.ts)$/u.test(item.location.file))).toBe(true);
+    expect(missing.some((item) => item.location.file.endsWith('.manual.yaml'))).toBe(true);
+    expect(missing.some((item) => item.location.file.endsWith('.spec.ts'))).toBe(true);
   });
 
   it('reports missing belongsTo and does not inherit it from a parent or path', async () => {
@@ -184,7 +219,7 @@ describe('project catalog', () => {
     await writeFile(overlapConfig, (await readFile(overlapConfig, 'utf8')).replace('paths: ["src/**/*.test.ts"]', 'paths: ["knowledge/**/*.manual.yaml", "src/**/*.test.ts"]'), 'utf8');
     const overlap = await checkProject(overlapConfig);
     expect(overlap.ok).toBe(false);
-    if (!overlap.ok) expect(overlap.diagnostics.some((item) => item.code === 'TM010')).toBe(true);
+    if (!overlap.ok) expect(overlap.diagnostics.some((item) => item.code === 'TM010' && item.reason.includes('sources[0] (manual/e2e)') && item.reason.includes('sources[1] (vitest/unit)'))).toBe(true);
 
     const sameGroupRoot = await mkdtemp(path.join(tmpdir(), 'test-manager-same-group-overlap-'));
     await cp(fixture, sameGroupRoot, { recursive: true });

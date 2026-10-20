@@ -49,8 +49,7 @@ export type ProjectRules = Readonly<{
   idPattern: string;
   discovery: Readonly<{
     documents: ReadonlyArray<string>;
-    manualCases: ReadonlyArray<string>;
-    sources: ReadonlyArray<Readonly<{ kind: SourceKind; paths: ReadonlyArray<string> }>>;
+    sources: ReadonlyArray<Readonly<{ kind: CaseSource; layer: string; paths: ReadonlyArray<string> }>>;
   }>;
   documents: Readonly<{
     kinds: Readonly<Record<string, KindRule>>;
@@ -76,6 +75,7 @@ export type CaseFields = Readonly<{ belongsTo: DocumentId; refs?: ReadonlyArray<
 type CaseBase = Readonly<{
   id: CaseId;
   title: string;
+  layer: string;
   fields: CaseFields;
   details: Readonly<Record<string, unknown>>;
   location: Location;
