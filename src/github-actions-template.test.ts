@@ -19,9 +19,9 @@ describe('GitHub Actions consumer template', () => {
     const outputFile = path.join(root, 'manifest.json');
     await writeFile(catalogFile, JSON.stringify({
       cases: [
-        { id: 'CASE-001', source: 'vitest' },
-        { id: 'CASE-002', source: 'playwright' },
-        { id: 'CASE-003', source: 'manual' },
+        { id: 'CASE-001', source: 'vitest', layer: 'unit' },
+        { id: 'CASE-002', source: 'playwright', layer: 'e2e' },
+        { id: 'CASE-003', source: 'manual', layer: 'e2e' },
       ],
     }), 'utf8');
 
@@ -40,7 +40,6 @@ describe('GitHub Actions consumer template', () => {
         TM_VITEST_LAYER: 'unit',
         TM_VITEST_TARGET: 'node',
         TM_PLAYWRIGHT_UNIT_ID: 'playwright-e2e-chromium',
-        TM_PLAYWRIGHT_LAYER: 'E2E',
         TM_PLAYWRIGHT_TARGET: 'chromium',
         GITHUB_TOKEN: 'must-not-be-saved',
       },
@@ -53,15 +52,30 @@ describe('GitHub Actions consumer template', () => {
     if (!parsed.success) return;
     expect(parsed.data.units).toEqual([
       { unitId: 'vitest-unit-node', runner: 'vitest', layer: 'unit', target: 'node', plannedCaseIds: ['CASE-001'] },
-      { unitId: 'playwright-e2e-chromium', runner: 'playwright', layer: 'E2E', target: 'chromium', plannedCaseIds: ['CASE-002'] },
+      { unitId: 'playwright-e2e-chromium', runner: 'playwright', layer: 'e2e', target: 'chromium', plannedCaseIds: ['CASE-002'] },
     ]);
+  });
+
+  it('refuses to merge one runner across several catalog layers into a single unit', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-ci-template-layers-'));
+    const catalogFile = path.join(root, 'catalog.json');
+    const outputFile = path.join(root, 'manifest.json');
+    await writeFile(catalogFile, JSON.stringify({ cases: [{ id: 'CASE-001', source: 'vitest', layer: 'unit' }, { id: 'CASE-002', source: 'vitest', layer: 'integration' }] }), 'utf8');
+    await expect(executeFile(process.execPath, [generator, '--catalog', catalogFile, '--id-pattern', '^CASE-[0-9]{3}$', '--out', outputFile], {
+      env: {
+        PATH: process.env.PATH, TM_TOOL_DIR: path.resolve('.'), TM_RUN_ID: '1842', TM_RUN_ATTEMPT: '1', TM_ENVIRONMENT: 'staging', TM_COMMIT: '7f3a12c',
+        TM_SCOPE_ID: 'daily-all', TM_STARTED_AT: '2026-09-16T00:00:00Z', TM_CI_URL: 'https://github.com/example/project/actions/runs/1842',
+        TM_VITEST_UNIT_ID: 'vitest-unit-node', TM_VITEST_TARGET: 'node',
+      },
+    })).rejects.toThrow(/span layers unit, integration/u);
+    await expect(readFile(outputFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('fails before writing when required explicit CI values are missing', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-ci-template-invalid-'));
     const catalogFile = path.join(root, 'catalog.json');
     const outputFile = path.join(root, 'manifest.json');
-    await writeFile(catalogFile, JSON.stringify({ cases: [{ id: 'CASE-001', source: 'vitest' }] }), 'utf8');
+    await writeFile(catalogFile, JSON.stringify({ cases: [{ id: 'CASE-001', source: 'vitest', layer: 'unit' }] }), 'utf8');
 
     await expect(executeFile(process.execPath, [generator, '--catalog', catalogFile, '--id-pattern', '^CASE-[0-9]{3}$', '--out', outputFile], {
       env: { PATH: process.env.PATH, TM_TOOL_DIR: path.resolve('.') },
@@ -72,7 +86,7 @@ describe('GitHub Actions consumer template', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-ci-template-invalid-manifest-'));
     const catalogFile = path.join(root, 'catalog.json');
     const outputFile = path.join(root, 'manifest.json');
-    await writeFile(catalogFile, JSON.stringify({ cases: [{ id: 'CASE-001', source: 'vitest' }] }), 'utf8');
+    await writeFile(catalogFile, JSON.stringify({ cases: [{ id: 'CASE-001', source: 'vitest', layer: 'unit' }] }), 'utf8');
 
     await expect(executeFile(process.execPath, [generator, '--catalog', catalogFile, '--id-pattern', '^CASE-[0-9]{3}$', '--out', outputFile], {
       env: {
@@ -109,7 +123,7 @@ describe('GitHub Actions consumer template', () => {
       ciUrl: 'https://github.com/example/project/actions/runs/1842',
       units: [
         { unitId: 'vitest-unit-node', runner: 'vitest', layer: 'unit', target: 'node', plannedCaseIds: ['CASE-001'] },
-        { unitId: 'playwright-e2e-chromium', runner: 'playwright', layer: 'E2E', target: 'chromium', plannedCaseIds: ['CASE-002'] },
+        { unitId: 'playwright-e2e-chromium', runner: 'playwright', layer: 'e2e', target: 'chromium', plannedCaseIds: ['CASE-002'] },
       ],
     }), 'utf8');
     await mkdir(artifactDirectory, { recursive: true });

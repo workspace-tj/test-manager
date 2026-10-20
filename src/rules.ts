@@ -149,10 +149,6 @@ export const loadRules = async (
   }
   const parsed = parseStrictYaml(source, absolute);
   if (parsed.diagnostics.length > 0) return { diagnostics: parsed.diagnostics };
-  const discovery = typeof parsed.value === 'object' && parsed.value !== null ? (parsed.value as { discovery?: unknown }).discovery : undefined;
-  if (typeof discovery === 'object' && discovery !== null && 'manualCases' in discovery) {
-    return { diagnostics: [diagnostic('TM003', absolute, 'discovery.manualCases', 'manualCases was removed; declare manual cases in discovery.sources with kind: manual and a layer', yamlPathLine(source, ['discovery', 'manualCases']))] };
-  }
   const result = RulesSchema.safeParse(parsed.value);
   if (!result.success) {
     return { diagnostics: result.error.issues.map((issue) => {

@@ -2,7 +2,7 @@ import { observedCaseStatus } from './case-result.js';
 import type { ObservedCaseStatus } from './case-result.js';
 import type { ReleaseCatalogCase, ReleaseCatalogSnapshot } from './release-catalog.js';
 import type { TestRun } from './test-run.js';
-import { validateTestRunCatalog } from './test-run-catalog.js';
+import { describeTestRunCatalogProblem, validateTestRunCatalog } from './test-run-catalog.js';
 
 type LatestResult = Readonly<
   | { kind: 'notProvided' | 'notInRun' | 'missing' | 'notApplicable' }
@@ -90,9 +90,7 @@ export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => 
     problems.push('staging run must use the staging environment and commit');
   }
   if (input.staging.latestRun) for (const problem of validateTestRunCatalog(input.staging.snapshot.cases, input.staging.latestRun)) {
-    problems.push(problem.kind === 'unknownCase'
-      ? `staging run contains unknown case ${problem.caseId}`
-      : `staging run runner ${problem.runner} does not match case ${problem.caseId} source ${problem.source}`);
+    problems.push(`staging run ${describeTestRunCatalogProblem(problem)}`);
   }
   if (problems.length > 0) return { ok: false, problems };
 

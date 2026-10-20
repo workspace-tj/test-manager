@@ -163,8 +163,6 @@ case:
   - `layer`: そのファイル群が確かめるテスト層。`unit`、`integration`、`e2e` などプロジェクトで自由に名付けます。省略できません
   - 同じ `kind` を複数行に分け、パスで層を分けられます。たとえば integration テストを `*.integration.test.ts` とする場合、unit 側は `src/**/!(*.integration).test.ts` のように除外して重複を避けます
 
-以前の `manualCases` は廃止しました。`sources` に `kind: manual` と `layer` を指定した行へ移してください。
-
 設定した glob が 1 件も見つからない場合や、一つのファイルが複数の設定に重複して一致した場合は診断します。
 
 ### documents.kinds
