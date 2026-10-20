@@ -18,6 +18,8 @@ export type ReleaseCaseChange = Readonly<{
   kind: 'added' | 'changed' | 'removed';
   caseId: string;
   title: string;
+  layer: string;
+  previousLayer?: string;
   verification: Verification;
 }>;
 
@@ -27,7 +29,7 @@ export type ReleaseGroup = Readonly<{
   featureId?: string;
   featureTitle?: string;
   changes: ReadonlyArray<ReleaseCaseChange>;
-  inventory: ReadonlyArray<Readonly<{ caseId: string; title: string; definition: 'active' | 'skip' | 'todo'; change: 'added' | 'changed' | 'unchanged'; verification: Verification }>>;
+  inventory: ReadonlyArray<Readonly<{ caseId: string; title: string; layer: string; previousLayer?: string; definition: 'active' | 'skip' | 'todo'; change: 'added' | 'changed' | 'unchanged'; verification: Verification }>>;
 }>;
 
 export type ReleaseDiffView = Readonly<{
@@ -106,6 +108,10 @@ export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => 
     if (!currentById.has(managedCase.id)) changes.push({ kind: 'removed', managedCase, snapshot: input.production });
   }
 
+  const layerMove = (managedCase: ReleaseCatalogCase): Readonly<{ previousLayer?: string }> => {
+    const previousLayer = previousById.get(managedCase.id)?.layer;
+    return previousLayer !== undefined && previousLayer !== managedCase.layer ? { previousLayer } : {};
+  };
   const grouped = new Map<string, ReleaseGroup>();
   for (const change of changes) {
     const documents = new Map(change.snapshot.documents.map((document) => [document.id, document]));
@@ -118,6 +124,8 @@ export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => 
       kind: change.kind,
       caseId: change.managedCase.id,
       title: change.managedCase.title,
+      layer: change.managedCase.layer,
+      ...layerMove(change.managedCase),
       verification: verificationFor(change.managedCase, input.staging.latestRun, change.kind === 'removed'),
     };
     const existing = grouped.get(key);
@@ -144,7 +152,7 @@ export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => 
     if (!group) continue;
     const change = group.changes.find((item) => item.caseId === managedCase.id)?.kind;
     const inventoryItem = {
-      caseId: managedCase.id, title: managedCase.title, definition: managedCase.status,
+      caseId: managedCase.id, title: managedCase.title, layer: managedCase.layer, ...layerMove(managedCase), definition: managedCase.status,
       change: change === 'added' || change === 'changed' ? change : 'unchanged',
       verification: verificationFor(managedCase, input.staging.latestRun, false),
     } as const;
