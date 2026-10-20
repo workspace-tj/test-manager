@@ -12,9 +12,7 @@
 4. 下記のreporter設定を既存のVitest・Playwright設定へ組み込みます。
 5. workflow内の`pnpm vitest run`と`pnpm playwright test --project=chromium`を、consumerで普段使う実行コマンドへ必要に応じて置き換えます。Playwrightのproject名を変える場合は`TM_PLAYWRIGHT_TARGET`も同じ実行対象を表す値へ揃えます。
 
-production snapshotも、指定した`TEST_MANAGER_REF`のtest-managerで`TEST_MANAGER_PRODUCTION_REF`時点の`test-manager.yaml`を読み直して生成します。そのため、test-managerを設定形式が変わる版へ上げるときは、production側の`test-manager.yaml`も新形式へ移行してから参照を更新します。たとえば`discovery.sources`へ`layer`を必須化した版では、`manualCases`を残したproduction設定はsnapshot生成で失敗します。
-
-実行unitのlayerは、`create-manifest.mjs`がcatalogの各ケースの`layer`から決めます。`dashboard`は、unitのlayerと計画したケースのlayerが一致しない実行結果を拒否します。この例はrunnerごとに1unitへまとめるため、同じrunnerのケースが複数layerにまたがるとmanifest作成で失敗します。その場合はVitestの`projects`などでlayerごとに実行を分け、unitもlayerごとに作るよう例を拡張してください。`TM_VITEST_LAYER`はVitest reporterの必須オプションですが、unit artifactには記録されず、TestRunのlayerには使われません。紛らわしさを避けるためcatalogのlayerと同じ値にしておきます。旧版の例（`TM_PLAYWRIGHT_LAYER: E2E`など）で作ったTestRunは、layerの表記がcatalogと違うと`daily`・`dashboard`で拒否されるため、作り直してから渡します。
+実行unitのlayerは、`create-manifest.mjs`がcatalogの各ケースの`layer`から決めます。`dashboard`は、unitのlayerと計画したケースのlayerが一致しない実行結果を拒否します。この例はrunnerごとに1unitへまとめるため、同じrunnerのケースが複数layerにまたがるとmanifest作成で失敗します。その場合はVitestの`projects`などでlayerごとに実行を分け、unitもlayerごとに作るよう例を拡張してください。`TM_VITEST_LAYER`はVitest reporterの必須オプションですが、unit artifactには記録されず、TestRunのlayerには使われません。紛らわしさを避けるためcatalogのlayerと同じ値にしておきます。
 
 どちらの参照もbranchやtagではなくfull SHAに固定します。production checkoutはconsumerのworkspace外へ作成するため、current catalogのglobやテスト探索へproduction側のファイルは混入しません。
 

@@ -79,7 +79,6 @@ describe('release catalog difference', () => {
     expect(production.cases.every((item) => item.layer.length > 0)).toBe(true);
     const legacy = parseReleaseCatalogSnapshot({ ...production, schemaVersion: 1 });
     expect(legacy.success).toBe(false);
-    expect(legacy.error?.message).toContain('regenerate');
     const moved = production.cases[0];
     if (!moved) throw new Error('fixture must contain cases');
     const staging = { ...createReleaseCatalogSnapshot(checked.catalog, '7f3a12c'), cases: production.cases.map((item) => item.id === moved.id ? { ...item, layer: 'integration' } : item) };

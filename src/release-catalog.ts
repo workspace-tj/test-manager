@@ -19,7 +19,7 @@ const releaseCaseSchema = z.discriminatedUnion('source', [
 ]);
 
 const snapshotShape = z.strictObject({
-  schemaVersion: z.literal(2, { error: 'schemaVersion must be 2; snapshots from older test-manager versions lack case layers, so regenerate them with the current snapshot command' }),
+  schemaVersion: z.literal(2),
   commit: CommitSchema,
   idPattern: z.string().min(1),
   documents: z.array(z.strictObject({

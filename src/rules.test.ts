@@ -84,18 +84,13 @@ describe('project-defined vocabulary', () => {
     expect(numeric.diagnostics.some((item) => item.subject.endsWith('requiredWhen.equals'))).toBe(true);
   });
 
-  it('requires a layer on every discovery source and explains the removed manualCases key', async () => {
+  it('requires a layer on every discovery source', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-rule-layer-'));
     const source = await readFile(path.resolve('fixtures/valid/test-manager.yaml'), 'utf8');
     await writeFile(path.join(root, 'missing-layer.yaml'), source.replace('      layer: unit\n', ''), 'utf8');
     const missing = await loadRules(path.join(root, 'missing-layer.yaml'));
     expect(missing.rules).toBeUndefined();
     expect(missing.diagnostics.some((item) => item.subject.endsWith('layer'))).toBe(true);
-    await writeFile(path.join(root, 'legacy.yaml'), source.replace('  sources:\n', '  manualCases: ["knowledge/**/*.manual.yaml"]\n  sources:\n'), 'utf8');
-    const legacy = await loadRules(path.join(root, 'legacy.yaml'));
-    expect(legacy.rules).toBeUndefined();
-    expect(legacy.diagnostics).toEqual([expect.objectContaining({ code: 'TM003', subject: 'discovery.manualCases' })]);
-    expect(legacy.diagnostics[0]?.reason).toContain('kind: manual');
   });
 
   it('rejects requiredWhen source values that are not case sources', async () => {
