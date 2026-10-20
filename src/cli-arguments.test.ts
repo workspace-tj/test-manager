@@ -47,6 +47,12 @@ describe('CLI argument grammar', () => {
     expect(parseCliArguments(['schema', '--out', 'x'])).toBeUndefined();
   });
 
+  it('parses the pull request comment command with an optional output file', () => {
+    expect(parseCliArguments(['pr-comment', '--base-snapshot', 'base.json', '--head-snapshot', 'head.json'])).toEqual({ command: 'pr-comment', baseSnapshot: 'base.json', headSnapshot: 'head.json' });
+    expect(parseCliArguments(['pr-comment', '--base-snapshot', 'base.json', '--head-snapshot', 'head.json', '--out', 'comment.md'])).toEqual({ command: 'pr-comment', baseSnapshot: 'base.json', headSnapshot: 'head.json', out: 'comment.md' });
+    expect(parseCliArguments(['pr-comment', '--base-snapshot', 'base.json'])).toBeUndefined();
+  });
+
   it.each([
     ['unknown command', ['unknown']],
     ['missing flag value', ['check', '--config']],
