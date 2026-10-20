@@ -52,11 +52,32 @@ describe('project-defined vocabulary', () => {
     expect(diagnostics[0]?.reason).toContain('required when role');
   });
 
+  it('supports requiredWhen conditioned on the case source', () => {
+    const rules = {
+      belongsTo: { required: true as const, placement: 'classification' as const, type: 'reference' as const, targetKinds: ['area'] },
+      device: { required: false as const, placement: 'classification' as const, requiredWhen: { field: 'source', equals: 'playwright' }, type: 'text' as const },
+    };
+    const documents = [{ id: documentIdSchema(/.*/u).parse('area'), kind: 'area', title: 'Area', body: '', location: { file: 'area.md', line: 1, column: 1 } }];
+    const diagnostics = validateCaseFields({ belongsTo: 'area' }, rules, documents, 'case.ts', 'playwright');
+    expect(diagnostics.map((item) => item.code)).toEqual(['TM121']);
+    expect(diagnostics[0]?.reason).toContain('required when source');
+    expect(validateCaseFields({ belongsTo: 'area' }, rules, documents, 'case.ts', 'vitest')).toEqual([]);
+  });
+
   it('distinguishes missing references from disallowed target kinds', () => {
     const rule = { belongsTo: { required: true, placement: 'classification' as const, type: 'reference' as const, targetKinds: ['area'] } };
     const documents = [{ id: documentIdSchema(/.*/u).parse('spec'), kind: 'specification', title: 'Spec', body: '', location: { file: 'spec.md', line: 1, column: 1 } }];
     expect(validateCaseFields({ belongsTo: 'missing' }, rule, documents, 'case.ts').map((item) => item.code)).toEqual(['TM126']);
     expect(validateCaseFields({ belongsTo: 'spec' }, rule, documents, 'case.ts').map((item) => item.code)).toEqual(['TM127']);
+  });
+
+  it('rejects requiredWhen source values that are not case sources', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-rule-source-condition-'));
+    const source = await readFile(path.resolve('fixtures/valid/test-manager.yaml'), 'utf8');
+    await writeFile(path.join(root, 'test-manager.yaml'), source.replace('required: false, placement: classification, type: reference-list', 'required: false, placement: classification, requiredWhen: { field: source, equals: cypress }, type: reference-list'), 'utf8');
+    const result = await loadRules(path.join(root, 'test-manager.yaml'));
+    expect(result.rules).toBeUndefined();
+    expect(result.diagnostics.some((item) => item.subject.endsWith('requiredWhen.equals'))).toBe(true);
   });
 
   it('rejects requiredWhen values that cannot match the target field', async () => {

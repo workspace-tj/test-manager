@@ -94,6 +94,24 @@ describe('project catalog', () => {
     expect(documentIndex.indexOf('Module two')).toBeLessThan(documentIndex.indexOf('Module one'));
   });
 
+  it.each([
+    ['manual', /\.manual\.yaml$/u],
+    ['vitest', /\.test\.ts$/u],
+    ['playwright', /\.spec\.ts$/u],
+    ['storybook', /\.stories\.tsx$/u],
+  ])('requires a field only for %s cases when requiredWhen targets the source', async (source, filePattern) => {
+    const root = await mkdtemp(path.join(tmpdir(), `test-manager-source-condition-${source}-`));
+    await cp(fixture, root, { recursive: true });
+    const config = path.join(root, 'test-manager.yaml');
+    await writeFile(config, (await readFile(config, 'utf8')).replace('    reason: {', `    sourceNote: { required: false, placement: detail, type: text, requiredWhen: { field: source, equals: ${source} } }\n    reason: {`), 'utf8');
+    const result = await checkProject(config);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const missing = result.diagnostics.filter((item) => item.code === 'TM121' && item.subject === 'sourceNote');
+    expect(missing.length).toBeGreaterThan(0);
+    expect(missing.every((item) => filePattern.test(item.location.file))).toBe(true);
+  });
+
   it('reports missing belongsTo and does not inherit it from a parent or path', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-invalid-'));
     await cp(fixture, root, { recursive: true });
