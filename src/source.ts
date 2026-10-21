@@ -146,7 +146,9 @@ export const readTestSource = async (
           diagnostics.push(diagnostic('TM202', relative, 'title', 'managed test title must be a static string', line));
           return;
         }
-        if (shape.dynamicEach) diagnostics.push(diagnostic('TM203', relative, title, 'each table must be an inline array literal', line));
+        // A table that cannot be read as values is kept as its source text, so the case still lists what it varies.
+        const parametersSource = shape.dynamicEach && shape.tableRange ? source.slice(shape.tableRange.start, shape.tableRange.end).replace(/\r\n?/gu, '\n') : undefined;
+        if (shape.dynamicEach && parametersSource === undefined) diagnostics.push(diagnostic('TM203', relative, title, 'each table could not be located', line));
         const commentNode = t.isExpressionStatement(callPath.parent) ? callPath.parent : call;
         const before = markerYaml(immediateComment(commentNode), '@case', relative, classificationKeys, 'TM207');
         diagnostics.push(...before.diagnostics);
@@ -173,7 +175,7 @@ export const readTestSource = async (
           tagProblem = collected.dynamic || fromTags.conflicts.length > 0 || tagFieldNames(rules.case.fields).some((name) => before.value !== undefined && name in before.value);
           tagged = fromTags.values;
         }
-        if (!before.value || (details.found && !details.value) || !id.success || shape.dynamicEach || extractedId.invalidMultiplicity || extractedId.unsupportedShape || tagProblem) return;
+        if (!before.value || (details.found && !details.value) || !id.success || (shape.dynamicEach && parametersSource === undefined) || extractedId.invalidMultiplicity || extractedId.unsupportedShape || tagProblem) return;
         const fields = parseCaseFields({ ...before.value, ...tagged, ...details.value }, { source: kind, layer }, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
         if (!fields.ok) {
           diagnostics.push(...fields.diagnostics);
@@ -182,7 +184,7 @@ export const readTestSource = async (
         const endLine = call.loc?.end.line ?? line;
         const separated = partitionCaseFields(fields.fields, rules.case.fields);
         const base = { id: id.data, title, layer, fields: separated.classification, details: separated.details, location: location(relative, line), snippet: source.split(/\r?\n/u).slice(line - 1, endLine).join('\n') };
-        if (kind === 'vitest') cases.push({ ...base, source: 'vitest', status: runnerSourceAdapter('vitest').status(shape.name), ...(shape.parameters ? { parameters: shape.parameters } : {}) });
+        if (kind === 'vitest') cases.push({ ...base, source: 'vitest', status: runnerSourceAdapter('vitest').status(shape.name), ...(shape.parameters ? { parameters: shape.parameters } : {}), ...(parametersSource !== undefined ? { parametersSource } : {}) });
         else cases.push({ ...base, source: 'playwright', status: runnerSourceAdapter('playwright').status(shape.name) });
       },
     });
