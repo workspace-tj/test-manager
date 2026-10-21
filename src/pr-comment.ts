@@ -13,6 +13,12 @@ const escapeMarkdown = (value: string): string => value
   .replace(/@/gu, '@\u2060')
   .replace(/\s*\r?\n\s*/gu, ' ');
 
+// Long texts such as a changed purpose are shortened; the comment shows that and how a value changed, not the full text.
+const clip = (value: string): string => {
+  const characters = Array.from(value);
+  return characters.length > 40 ? `${characters.slice(0, 40).join('')}…` : value;
+};
+
 const layerText = (change: ReleaseCaseChange): string => change.previousLayer === undefined ? change.layer : `${change.previousLayer} → ${change.layer}`;
 
 export const renderPrComment = (view: ReleaseDiffView): string => {
@@ -32,7 +38,10 @@ export const renderPrComment = (view: ReleaseDiffView): string => {
     const title = group.featureTitle ? `${group.domainTitle} / ${group.featureTitle}` : group.domainTitle;
     const groupLines = ['', `#### ${escapeMarkdown(title)}`, ''];
     for (const change of group.changes) {
-      const row = `- ${changeLabel[change.kind]} \`${change.caseId.replace(/[`\s]/gu, '')}\` ${escapeMarkdown(change.title)} · ${escapeMarkdown(layerText(change))}`;
+      const fieldLine = change.fieldChanges?.length
+        ? `\n  - ${change.fieldChanges.map((item) => `${escapeMarkdown(item.label)}: ${escapeMarkdown(clip(item.before))} → ${escapeMarkdown(clip(item.after))}`).join('、')}`
+        : '';
+      const row = `- ${changeLabel[change.kind]} \`${change.caseId.replace(/[`\s]/gu, '')}\` ${escapeMarkdown(change.title)} · ${escapeMarkdown(layerText(change))}${fieldLine}`;
       const added = (groupLines.length === 3 ? groupLines.join('\n').length + 1 : 0) + row.length + 1;
       if (omitted > 0 || length + added > maxCommentLength) {
         omitted += 1;

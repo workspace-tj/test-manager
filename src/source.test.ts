@@ -76,17 +76,17 @@ describe('unsupported source syntax', () => {
     expect(result.diagnostics.some((item) => item.code === 'TM122' && item.subject === 'conditions' && item.location.line === 11)).toBe(true);
   });
 
-  it('diagnoses dynamic each and missing declaration metadata instead of silently dropping it', async () => {
+  it('keeps an each table it cannot read as source text, and still diagnoses missing declaration metadata', async () => {
     const loaded = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
     expect(loaded.rules).toBeDefined();
     if (!loaded.rules) return;
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-source-'));
     const file = path.join(root, 'dynamic.test.ts');
-    await writeFile(file, `import { test } from 'vitest';\nconst rows = [[1]];\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest.each(rows)('dynamic %i', () => {});\n`, 'utf8');
+    await writeFile(file, `import { test } from 'vitest';\nimport { rows } from './rows';\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest.each(rows)('dynamic %i', () => {});\n`, 'utf8');
     const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'domain', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
     const result = await readTestSource(file, root, 'vitest', 'unit', loaded.rules, documents);
     expect(result.cases).toEqual([]);
-    expect(new Set(result.diagnostics.map((item) => item.code))).toEqual(new Set(['TM203', 'TM205']));
+    expect(result.diagnostics.map((item) => item.code)).toEqual(['TM205']);
   });
 
   it('ignores ordinary tests from other imports', async () => {
@@ -143,16 +143,55 @@ describe('unsupported source syntax', () => {
     expect((await readTestSource(playwrightSpread, root, 'playwright', 'unit', loaded.rules, [])).diagnostics.some((item) => item.code === 'TM210')).toBe(true);
   });
 
-  it('rejects expressions, spreads, and computed keys inside an inline each table', async () => {
+  it('reads each tables wrapped in type assertions and same-file const tables', async () => {
+    const loaded = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
+    if (!loaded.rules) return;
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-each-static-'));
+    const marker = '/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/';
+    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'domain', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
+    const read = async (name: string, body: string) => {
+      const file = path.join(root, `${name}.test.ts`);
+      await writeFile(file, `import { test } from 'vitest';\n${body}\n`, 'utf8');
+      return readTestSource(file, root, 'vitest', 'unit', loaded.rules!, documents);
+    };
+    const asConst = await read('as-const', `${marker}\ntest.each(['approved', 'rejected'] as const)('kind %s', { meta: { caseId: 'CASE-961' } }, () => {});`);
+    expect(asConst.diagnostics).toEqual([]);
+    expect(asConst.cases.map((item) => item.source === 'vitest' ? item.parameters : undefined)).toEqual([['approved', 'rejected']]);
+    const satisfies = await read('satisfies', `${marker}\ntest.each([[null, false] as const, ['x', true]] satisfies ReadonlyArray<readonly [string | null, boolean]>)('row %s', { meta: { caseId: 'CASE-962' } }, () => {});`);
+    expect(satisfies.cases.map((item) => item.source === 'vitest' ? item.parameters : undefined)).toEqual([[[null, false], ['x', true]]]);
+    const constTable = await read('const-table', `const codes = ['A', 'B'] as const;\n${marker}\ntest.each(codes)('code %s', { meta: { caseId: 'CASE-963' } }, () => {});`);
+    expect(constTable.diagnostics).toEqual([]);
+    expect(constTable.cases.map((item) => item.source === 'vitest' ? item.parameters : undefined)).toEqual([['A', 'B']]);
+    const destructured = await read('destructured', `const [rows] = [[1, 2]];\n${marker}\ntest.each(rows)('row %s', { meta: { caseId: 'CASE-967' } }, () => {});`);
+    expect(destructured.cases.map((item) => item.source === 'vitest' ? [item.parameters, item.parametersSource] : undefined)).toEqual([[undefined, 'rows']]);
+    const mutated = await read('mutated', `const rows = [1];\nrows.push(2);\n${marker}\ntest.each(rows)('row %s', { meta: { caseId: 'CASE-968' } }, () => {});`);
+    expect(mutated.cases.map((item) => item.source === 'vitest' ? [item.parameters, item.parametersSource] : undefined)).toEqual([[undefined, 'rows']]);
+    const sharedByTwo = await read('shared', `const rows = ['a'];\n${marker}\ntest.each(rows)('one %s', { meta: { caseId: 'CASE-969' } }, () => {});\n${marker}\ntest.each(rows)('two %s', { meta: { caseId: 'CASE-970' } }, () => {});`);
+    expect(sharedByTwo.cases.map((item) => item.source === 'vitest' ? item.parameters : undefined)).toEqual([['a'], ['a']]);
+    const followedSource = await read('followed', `const account = () => ({});\nconst rows = [\r\n  [account()],\r\n];\n${marker}\ntest.each(rows)('row %s', { meta: { caseId: 'CASE-971' } }, () => {});`);
+    expect(followedSource.cases.map((item) => item.source === 'vitest' ? item.parametersSource : undefined)).toEqual(['[\n  [account()],\n]']);
+    const letTable = await read('let-table', `let codes = ['A'];\n${marker}\ntest.each(codes)('code %s', { meta: { caseId: 'CASE-964' } }, () => {});`);
+    expect(letTable.diagnostics).toEqual([]);
+    expect(letTable.cases.map((item) => item.source === 'vitest' ? [item.parameters, item.parametersSource] : undefined)).toEqual([[undefined, 'codes']]);
+    const computed = await read('computed', `const account = (code: string | null) => ({ code });\n${marker}\ntest.each([\n  ['null', null],\n  ['missing', account(null)],\n])('row %s', { meta: { caseId: 'CASE-965' } }, () => {});`);
+    expect(computed.diagnostics).toEqual([]);
+    expect(computed.cases.map((item) => item.source === 'vitest' ? item.parametersSource : undefined)).toEqual(["[\n  ['null', null],\n  ['missing', account(null)],\n]"]);
+    const template = await read('template', `${marker}\ntest.each\`\n  a | b\n  \${1} | \${2}\n\`('row $a', { meta: { caseId: 'CASE-966' } }, () => {});`);
+    expect(template.diagnostics).toEqual([]);
+    expect(template.cases.map((item) => item.source === 'vitest' ? item.parametersSource : undefined)).toEqual(['`\n  a | b\n  ${1} | ${2}\n`']);
+  });
+
+  it('keeps expressions, spreads, and computed keys inside an inline each table as source text', async () => {
     const loaded = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
     if (!loaded.rules) return;
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-each-values-'));
     for (const [name, cell] of [['expression', 'external'], ['spread', '...[1]'], ['computed', "{ ['key']: 1 }"]] as const) {
       const file = path.join(root, `${name}.test.ts`);
       await writeFile(file, `import { test } from 'vitest';\nconst external = 1;\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest.each([[${cell}]])('unsupported %s', { meta: { caseId: 'CASE-999' } }, () => {});\n`, 'utf8');
-      const result = await readTestSource(file, root, 'vitest', 'unit', loaded.rules, []);
-      expect(result.cases).toEqual([]);
-      expect(result.diagnostics.some((item) => item.code === 'TM203')).toBe(true);
+      const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'domain', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
+      const result = await readTestSource(file, root, 'vitest', 'unit', loaded.rules, documents);
+      expect(result.diagnostics).toEqual([]);
+      expect(result.cases.map((item) => item.source === 'vitest' ? [item.parameters, item.parametersSource] : undefined)).toEqual([[undefined, `[[${cell}]]`]]);
       expect(JSON.stringify(result)).not.toContain('<expression>');
     }
   });
@@ -171,17 +210,6 @@ describe('unsupported source syntax', () => {
     expect(result.diagnostics).toEqual([]);
     expect(result.cases[0]?.fields).not.toHaveProperty('preconditions');
     expect(result.cases[0]?.details).toEqual({ preconditions: ['signed in'] });
-  });
-
-  it('diagnoses tagged-template each as an unsupported managed declaration', async () => {
-    const loaded = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
-    if (!loaded.rules) return;
-    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-tagged-each-'));
-    const file = path.join(root, 'tagged.test.ts');
-    await writeFile(file, "import { test } from 'vitest';\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest.each`value\n${1}`('tagged $value', { meta: { caseId: 'CASE-999' } }, () => {});\n", 'utf8');
-    const result = await readTestSource(file, root, 'vitest', 'unit', loaded.rules, []);
-    expect(result.cases).toEqual([]);
-    expect(result.diagnostics.some((item) => item.code === 'TM203')).toBe(true);
   });
 
   it('diagnoses marked wrappers, namespace calls, and Story factories instead of silently dropping them', async () => {

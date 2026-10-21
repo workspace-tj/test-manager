@@ -85,13 +85,16 @@ const RulesShape = z.object({
     displayOrder: DisplayOrderSchema.optional().default({}),
   }).strict(),
   case: z.object({ fields: z.record(z.string(), FieldRuleSchema) }).strict(),
+  runners: z.object(Object.fromEntries((['vitest', 'playwright'] as const).map((kind) => [kind, z.object({
+    testModules: z.array(z.string().min(1)).min(1),
+  }).strict().optional()])) as Record<'vitest' | 'playwright', z.ZodOptional<z.ZodObject<{ testModules: z.ZodArray<z.ZodString> }, z.core.$strict>>>).strict().optional(),
   reports: z.object({
     breakdowns: z.array(z.object({ rows: z.string().min(1), columns: z.string().min(1) }).strict()).min(1),
   }).strict().optional(),
 }).strict();
 
 const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z.RefinementCtx): void => {
-  const reservedFields = new Set(['id', 'title', 'steps', 'source', 'status', 'details', 'procedure', 'parameters', 'location', 'snippet', 'owner', 'layer']);
+  const reservedFields = new Set(['id', 'title', 'steps', 'source', 'status', 'details', 'procedure', 'parameters', 'parametersSource', 'location', 'snippet', 'owner', 'layer']);
   for (const name of Object.keys(rules.case.fields)) if (reservedFields.has(name)) context.addIssue({ code: 'custom', path: ['case', 'fields', name], message: `${name} is reserved by the case model` });
   const belongsTo = rules.case.fields.belongsTo;
   if (!belongsTo || !belongsTo.required || belongsTo.type !== 'reference') {

@@ -13,7 +13,7 @@ const caseBase = {
 };
 const releaseCaseSchema = z.discriminatedUnion('source', [
   z.strictObject({ ...caseBase, source: z.literal('manual'), status: z.literal('active'), procedure: z.array(z.strictObject({ action: z.string(), expected: z.string() })) }),
-  z.strictObject({ ...caseBase, source: z.literal('vitest'), status: z.enum(['active', 'skip', 'todo']), parameters: z.array(z.unknown()).optional() }),
+  z.strictObject({ ...caseBase, source: z.literal('vitest'), status: z.enum(['active', 'skip', 'todo']), parameters: z.array(z.unknown()).optional(), parametersSource: z.string().optional() }),
   z.strictObject({ ...caseBase, source: z.literal('playwright'), status: z.enum(['active', 'skip']) }),
   z.strictObject({ ...caseBase, source: z.literal('storybook'), status: z.enum(['active', 'skip']) }),
 ]);
@@ -26,6 +26,8 @@ const snapshotShape = z.strictObject({
     id: IdentifierSchema, kind: z.string().min(1), title: z.string().min(1), parent: IdentifierSchema.optional(),
   })),
   cases: z.array(releaseCaseSchema),
+  // How the project names its case fields and enum values, so diffs can show readable before/after values.
+  fieldLabels: z.record(z.string(), z.strictObject({ label: z.string().optional(), kind: z.enum(['enum', 'reference', 'other']).optional(), values: z.record(z.string(), z.string()).optional() })).optional(),
 });
 
 export type ReleaseCatalogSnapshot = z.infer<typeof snapshotShape>;
@@ -64,7 +66,7 @@ const semanticCase = (managedCase: ManagedCase): ReleaseCatalogCase => {
   };
   switch (managedCase.source) {
     case 'manual': return { ...base, source: managedCase.source, status: managedCase.status, procedure: managedCase.procedure.map((step) => ({ ...step })) };
-    case 'vitest': return { ...base, source: managedCase.source, status: managedCase.status, ...(managedCase.parameters === undefined ? {} : { parameters: [...managedCase.parameters] }) };
+    case 'vitest': return { ...base, source: managedCase.source, status: managedCase.status, ...(managedCase.parameters === undefined ? {} : { parameters: [...managedCase.parameters] }), ...(managedCase.parametersSource === undefined ? {} : { parametersSource: managedCase.parametersSource }) };
     case 'playwright': return { ...base, source: managedCase.source, status: managedCase.status };
     case 'storybook': return { ...base, source: managedCase.source, status: managedCase.status };
   }
@@ -78,6 +80,11 @@ export const createReleaseCatalogSnapshot = (catalog: Catalog, commit: string): 
     id: document.id, kind: document.kind, title: document.title, ...(document.parent === undefined ? {} : { parent: document.parent }),
   })),
   cases: catalog.cases.map(semanticCase),
+  fieldLabels: Object.fromEntries(Object.entries(catalog.rules.case.fields).map(([name, rule]) => [name, {
+    ...(rule.label === undefined ? {} : { label: rule.label }),
+    kind: rule.type === 'enum' || rule.type === 'integer-enum' ? 'enum' : rule.type === 'reference' || rule.type === 'reference-list' ? 'reference' : 'other',
+    ...(rule.type === 'enum' || rule.type === 'integer-enum' ? { values: Object.fromEntries(Object.entries(rule.values).map(([key, value]) => [key, value.label ?? key])) } : {}),
+  }])),
 });
 
 export const parseReleaseCatalogSnapshot = (input: unknown) => snapshotShape.superRefine((snapshot, context) => {

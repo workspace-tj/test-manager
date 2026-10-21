@@ -62,6 +62,7 @@ export type ProjectRules = Readonly<{
     displayOrder: Readonly<Record<string, ReadonlyArray<string>>>;
   }>;
   case: Readonly<{ fields: Readonly<Record<string, FieldRule>> }>;
+  runners?: Readonly<{ [Kind in 'vitest' | 'playwright']?: Readonly<{ testModules: ReadonlyArray<string> }> | undefined }> | undefined;
   reports?: Readonly<{ breakdowns: ReadonlyArray<Readonly<{ rows: string; columns: string }>> }> | undefined;
 }>;
 
@@ -91,7 +92,7 @@ type CaseBase = Readonly<{
 
 export type ManagedCase = Readonly<
   | (CaseBase & { source: 'manual'; status: 'active'; procedure: ReadonlyArray<Readonly<{ action: string; expected: string }>> })
-  | (CaseBase & { source: 'vitest'; status: 'active' | 'skip' | 'todo'; parameters?: ReadonlyArray<unknown>; procedure?: never })
+  | (CaseBase & { source: 'vitest'; status: 'active' | 'skip' | 'todo'; parameters?: ReadonlyArray<unknown>; parametersSource?: string; procedure?: never })
   | (CaseBase & { source: 'playwright'; status: 'active' | 'skip'; procedure?: never })
   | (CaseBase & { source: 'storybook'; status: 'active' | 'skip'; procedure?: never })
 >;

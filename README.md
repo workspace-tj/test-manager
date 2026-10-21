@@ -94,7 +94,7 @@ E2Eの画面操作は `src/quality-site.e2e.pages.ts` の薄いPage Objectへ集
 
 リリース差分では、productionとstagingの各checkoutで `snapshot --config <path> --commit <sha> --out <path>` を実行します。その `release-catalog.json` 2件を `release --production-snapshot <path> --staging-snapshot <path> --out <path>` へ渡します。stagingの実行事実も表示する場合は、同じcommit・`staging`環境のrunを `--latest-staging-run` で指定します。
 
-PRごとの差分は `pr-comment --base-snapshot <path> --head-snapshot <path> [--out <path>]` で、追加・変更・削除されたケースをdomain・featureごとに並べたMarkdownとして出力できます。投稿はCIなど利用側が行います（[GitHub Actions導入例](examples/github-actions/README.md#prへケースの変更をコメントする)）。
+PRごとの差分は `pr-comment --base-snapshot <path> --head-snapshot <path> [--out <path>]` で、追加・変更・削除されたケースをdomain・featureごとに並べたMarkdownとして出力できます。変更したケースには、値が変わった項目を「重要度: S → A」のように、項目と値の表示名で添えます。所属する機能の付け替えや重要度の上げ下げを、レビューで見落とさないためです。長い文は40文字で切ります。投稿はCIなど利用側が行います（[GitHub Actions導入例](examples/github-actions/README.md#prへケースの変更をコメントする)）。
 
 手動ケースの実施結果は `--manual-results <path>` で渡します（`release`・`dashboard`、複数指定可）。記録した場所や外部ツールは問わず、次の形式のJSONへ変換して渡します。
 
@@ -346,6 +346,18 @@ test.describe('請求書', { tag: '@regression' }, () => {
 - テスト名の中に書いたタグ（`'請求書を発行できる @smoke'`）は読みません
 - Vitest と手動ケースでは、これまでどおり `@case` に書きます
 
+プロジェクトが `test.extend` などで作った `test` を自前の fixtures から import している場合は、その import 元を `runners.playwright.testModules`（Vitest は `runners.vitest.testModules`）に書きます。`@playwright/test` と `vitest` は常に対象です。
+
+```yaml
+runners:
+  playwright:
+    testModules:
+      - "@company/e2e/fixtures"          # パッケージ名はそのまま一致させる
+      - "apps/**/__e2e__/fixtures"       # 相対 import は、プロジェクトからのパス（拡張子なし）に直して glob で照合する
+```
+
+相対 import は、拡張子・末尾の `/index`・`?` 以降を除いて照合します。tsconfig の paths などの別名は、import に書いた文字列のまま完全一致で書きます。
+
 ### Storybook
 
 Story の明示的な `name` の先頭へケース ID を入れます。
@@ -389,9 +401,9 @@ node dist/cli-entry.js check --config ./test-manager.yaml
 
 ## 静的解析の対応境界
 
-対応するのは、各ランナーから直接 import した標準宣言、静的文字列タイトル、object literal の options、inline 配列リテラルの `each`、object literal の Story です。
+対応するのは、各ランナー（または `runners.*.testModules` に書いた fixtures）から import した標準宣言、静的文字列タイトル、object literal の options、`each`、object literal の Story です。`each` の表は、その場の配列リテラルか同じファイルの `const` なら値として読み（`as const`・`satisfies` は外して読みます）、それ以外（import した表、関数で作る値を含む表、テンプレートの表）はコードのままケースに残します。同じファイルの `const` は、分割代入でなく、`each` の表としてだけ使われている（`.push` などで中身を変えていない）ときにたどります。どちらも1つの `each` を1件のケースとし、表はケースのページとケース検索に出します。コードのまま残した表は、整形だけを変えてもリリース差分で「変更」になります。
 
-動的タイトル、動的 each、独自 wrapper、外部データからの生成、Story factory は、診断対象または対象外として明示します。対象ソースを実行して推測することはありません。
+動的タイトル、独自 wrapper、外部データからの生成、Story factory は、診断対象または対象外として明示します。対象ソースを実行して推測することはありません。
 
 ツールが検査するのは構造的な整合性です。ケース名が確認内容を正しく表しているか、条件・理由が十分か、実装と記述が意味的に一致しているかは、人がレビューします。
 

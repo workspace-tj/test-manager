@@ -455,6 +455,46 @@
       ],
       "additionalProperties": false
     },
+    "runners": {
+      "type": "object",
+      "properties": {
+        "vitest": {
+          "type": "object",
+          "properties": {
+            "testModules": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "required": [
+            "testModules"
+          ],
+          "additionalProperties": false
+        },
+        "playwright": {
+          "type": "object",
+          "properties": {
+            "testModules": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "required": [
+            "testModules"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "reports": {
       "type": "object",
       "properties": {

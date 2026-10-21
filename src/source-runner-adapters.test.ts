@@ -33,7 +33,7 @@ describe('runner source adapters', () => {
     const callPath = firstCall(source);
     const adapter = runnerSourceAdapter(kind);
 
-    expect(adapter.declaration(callPath)).toEqual({ name: 'test' });
+    expect(adapter.declaration(callPath, (specifier) => specifier === adapter.defaultModule)).toEqual({ name: 'test' });
     expect(adapter.extractCaseId(callPath.node)).toEqual({ id: expectedId, invalidMultiplicity: false });
     expect(adapter.status('test')).toBe('active');
   });

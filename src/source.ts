@@ -10,7 +10,7 @@ import { parseCaseFields, partitionCaseFields } from './case-fields.js';
 import type { Diagnostic, KnowledgeDocument, Location, ManagedCase, ProjectRules, SourceKind } from './model.js';
 import { diagnostic, location } from './diagnostics.js';
 import { ambiguousObject, objectProperty, stringValue } from './source-ast.js';
-import { runnerSourceAdapter } from './source-runner-adapters.js';
+import { runnerSourceAdapter, type RunnerModuleMatcher } from './source-runner-adapters.js';
 import { collectPlaywrightTags, fieldsFromTags, tagFieldNames } from './playwright-tags.js';
 import { storybookDeclarations } from './source-storybook-adapter.js';
 import { isRecord, parseStrictYaml } from './yaml.js';
@@ -98,6 +98,17 @@ const parseSource = (source: string, file: string): Readonly<{ ast?: t.File; dia
   }
 };
 
+// The runner's own module always counts. Configured entries match a bare specifier exactly, or a relative import
+// resolved to a project-relative path without extension, e.g. `apps/**/__e2e__/fixtures` for `import { test } from './fixtures'`.
+const runnerModuleMatcher = (defaultModule: string, configured: ReadonlyArray<string>, file: string): RunnerModuleMatcher => (specifier) => {
+  if (specifier === defaultModule || configured.includes(specifier)) return true;
+  if (!specifier.startsWith('.')) return false;
+  const resolved = path.posix.join(path.posix.dirname(file.split(path.sep).join('/')), specifier.replace(/[?#].*$/u, ''))
+    .replace(/\.[cm]?[jt]sx?$/u, '')
+    .replace(/\/index$/u, '');
+  return configured.some((pattern) => path.matchesGlob(resolved, pattern));
+};
+
 const markerFieldLocations = (marker: Readonly<{ fieldLocations?: Readonly<Record<string, Location>> }>): Readonly<Record<string, Location>> => marker.fieldLocations ?? {};
 
 export const readTestSource = async (
@@ -116,12 +127,13 @@ export const readTestSource = async (
   const diagnostics: Diagnostic[] = [...parsed.diagnostics];
   if (kind !== 'storybook') {
     const adapter = runnerSourceAdapter(kind);
+    const isRunnerModule = runnerModuleMatcher(adapter.defaultModule, rules.runners?.[kind]?.testModules ?? [], relative);
     const detailKeys = Object.entries(rules.case.fields).filter(([, rule]) => rule.placement === 'detail').map(([key]) => key);
     const classificationKeys = Object.entries(rules.case.fields).filter(([, rule]) => rule.placement === 'classification').map(([key]) => key);
     traverse(parsed.ast, {
       CallExpression(callPath: NodePath<t.CallExpression>) {
         const call = callPath.node;
-        const shape = adapter.declaration(callPath);
+        const shape = adapter.declaration(callPath, isRunnerModule);
         if (!shape.name) {
           const statement = t.isExpressionStatement(callPath.parent) ? callPath.parent : undefined;
           const unsupported = statement ? markerYaml(immediateComment(statement), '@case', relative, Object.keys(rules.case.fields), 'TM207') : { found: false };
@@ -134,7 +146,9 @@ export const readTestSource = async (
           diagnostics.push(diagnostic('TM202', relative, 'title', 'managed test title must be a static string', line));
           return;
         }
-        if (shape.dynamicEach) diagnostics.push(diagnostic('TM203', relative, title, 'each table must be an inline array literal', line));
+        // A table that cannot be read as values is kept as its source text, so the case still lists what it varies.
+        const parametersSource = shape.dynamicEach && shape.tableRange ? source.slice(shape.tableRange.start, shape.tableRange.end).replace(/\r\n?/gu, '\n') : undefined;
+        if (shape.dynamicEach && parametersSource === undefined) diagnostics.push(diagnostic('TM203', relative, title, 'each table could not be located', line));
         const commentNode = t.isExpressionStatement(callPath.parent) ? callPath.parent : call;
         const before = markerYaml(immediateComment(commentNode), '@case', relative, classificationKeys, 'TM207');
         diagnostics.push(...before.diagnostics);
@@ -161,7 +175,7 @@ export const readTestSource = async (
           tagProblem = collected.dynamic || fromTags.conflicts.length > 0 || tagFieldNames(rules.case.fields).some((name) => before.value !== undefined && name in before.value);
           tagged = fromTags.values;
         }
-        if (!before.value || (details.found && !details.value) || !id.success || shape.dynamicEach || extractedId.invalidMultiplicity || extractedId.unsupportedShape || tagProblem) return;
+        if (!before.value || (details.found && !details.value) || !id.success || (shape.dynamicEach && parametersSource === undefined) || extractedId.invalidMultiplicity || extractedId.unsupportedShape || tagProblem) return;
         const fields = parseCaseFields({ ...before.value, ...tagged, ...details.value }, { source: kind, layer }, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
         if (!fields.ok) {
           diagnostics.push(...fields.diagnostics);
@@ -170,7 +184,7 @@ export const readTestSource = async (
         const endLine = call.loc?.end.line ?? line;
         const separated = partitionCaseFields(fields.fields, rules.case.fields);
         const base = { id: id.data, title, layer, fields: separated.classification, details: separated.details, location: location(relative, line), snippet: source.split(/\r?\n/u).slice(line - 1, endLine).join('\n') };
-        if (kind === 'vitest') cases.push({ ...base, source: 'vitest', status: runnerSourceAdapter('vitest').status(shape.name), ...(shape.parameters ? { parameters: shape.parameters } : {}) });
+        if (kind === 'vitest') cases.push({ ...base, source: 'vitest', status: runnerSourceAdapter('vitest').status(shape.name), ...(shape.parameters ? { parameters: shape.parameters } : {}), ...(parametersSource !== undefined ? { parametersSource } : {}) });
         else cases.push({ ...base, source: 'playwright', status: runnerSourceAdapter('playwright').status(shape.name) });
       },
     });
