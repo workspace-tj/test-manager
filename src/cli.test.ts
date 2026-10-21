@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -64,6 +64,38 @@ describe('CLI process boundary', () => {
     expect(await readFile(path.join(out, '.test-manager-output'), 'utf8')).toBe('daily-v1\n');
     expect(await readFile(path.join(out, 'index.html'), 'utf8')).toContain('同じ環境の前回実行がないため比較できません');
     expect(await readFile(path.join(out, 'assets/dashboard.css'), 'utf8')).toContain('.domain-table-head');
+  });
+
+  it('reads a history directory and adds trend and flaky sections to the daily page', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-cli-history-'));
+    const historyDirectory = path.join(root, 'runs');
+    await mkdir(historyDirectory);
+    const run = (day: number, outcome: 'passed' | 'failed') => ({
+      schemaVersion: 1, runId: `run-${day}`, attempt: 1, environment: 'dev', commit: '7f3a12c', scopeId: 'daily-all',
+      startedAt: `2026-09-${day}T00:00:00Z`, completedAt: `2026-09-${day}T00:01:00Z`, ciUrl: `https://example.com/${day}`,
+      units: [{
+        state: 'completed', unitId: 'vitest-unit', runner: 'vitest', layer: 'unit', target: 'node', plannedCaseIds: ['CASE-001'],
+        observations: [{ caseId: 'CASE-001', expected: 'passed', attemptCoverage: { kind: 'complete' }, attempts: [{ outcome, durationMs: 10, startedAt: `2026-09-${day}T00:00:01Z`, artifactRefs: [] }] }],
+      }],
+    });
+    await writeFile(path.join(historyDirectory, 'run-11.json'), JSON.stringify(run(11, 'passed')));
+    await writeFile(path.join(historyDirectory, 'run-12.json'), JSON.stringify(run(12, 'failed')));
+    await writeFile(path.join(historyDirectory, 'notes.txt'), 'ignored');
+    await mkdir(path.join(historyDirectory, 'nested.json'));
+    await writeFile(path.join(root, 'linked-run-10.json'), JSON.stringify(run(10, 'passed')));
+    await symlink(path.join(root, 'linked-run-10.json'), path.join(historyDirectory, 'run-10.json'));
+    const current = path.join(root, 'current.json');
+    await writeFile(current, JSON.stringify(run(13, 'passed')));
+    const out = path.join(root, 'dashboard');
+    const result = await runCliDaily(['--current-run', current, '--history-dir', historyDirectory, '--out', out]);
+    expect(result.code).toBe(0);
+    const html = await readFile(path.join(out, 'index.html'), 'utf8');
+    expect(html).toContain('<h2>直近4回の推移</h2>');
+    expect(html).toContain('不安定 1 / 4回');
+    await writeFile(path.join(historyDirectory, 'broken.json'), '{}');
+    const broken = await runCliDaily(['--current-run', current, '--history-dir', historyDirectory, '--out', path.join(root, 'broken')]);
+    expect(broken.code).toBe(1);
+    expect(broken.stderr).toContain('broken.json');
   });
 
   it('assembles a current TestRun from manifest and unit artifacts', async () => {

@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { checkProject } from './catalog.js';
@@ -22,6 +22,10 @@ import type { CliArguments } from './cli-arguments.js';
 import { readJsonInput } from './cli-input.js';
 import { initProject } from './init.js';
 import { renderPrComment } from './pr-comment.js';
+import { buildRunHistory, defaultHistoryWindow } from './run-history.js';
+import type { RunHistoryView } from './run-history.js';
+import type { TestRun } from './test-run.js';
+import type { Catalog } from './model.js';
 import { rulesJsonSchema } from './rules.js';
 
 export type CliOutput = Readonly<{
@@ -50,6 +54,28 @@ const loadManualEvidence = async (
     })),
   ]);
   return { resultSets, snapshots };
+};
+
+const loadRunHistory = async (
+  options: Readonly<{ historyDir?: string; historyWindow?: number }>,
+  catalog: Catalog,
+  current: TestRun,
+  idPattern: RegExp,
+): Promise<RunHistoryView | undefined> => {
+  if (!options.historyDir) return undefined;
+  const directory = options.historyDir;
+  const candidates = (await readdir(directory)).filter((name) => name.endsWith('.json')).sort().map((name) => path.join(directory, name));
+  const runs: TestRun[] = [];
+  // Read one file at a time so a large history directory does not exhaust file handles.
+  for (const file of candidates) {
+    if (!(await stat(file)).isFile()) continue;
+    const parsed = parseTestRun(await readJsonInput(file, 'history TestRun'), idPattern);
+    if (!parsed.success) throw new Error(`invalid history TestRun ${file}: ${parsed.error.message}`);
+    runs.push(parsed.data);
+  }
+  const history = buildRunHistory(catalog, current, runs, options.historyWindow ?? defaultHistoryWindow);
+  if (!history.ok) throw new Error(`invalid run history: ${history.problems.join('; ')}`);
+  return history.view;
 };
 
 export const executeCliCommand = async (parsed: CliArguments, output: CliOutput): Promise<number> => {
@@ -159,7 +185,8 @@ export const executeCliCommand = async (parsed: CliArguments, output: CliOutput)
     const manual = await loadManualEvidence(parsed, idPattern);
     const release = buildReleaseDiff({ production: production.data, staging: { snapshot: staging.data, ...(latestStagingRun?.data ? { latestRun: latestStagingRun.data } : {}) }, ...(manual ? { manual } : {}) });
     if (!release.ok) throw new Error(`invalid release comparison: ${release.problems.join('; ')}`);
-    await writeManagedFiles(renderQualitySite(result.catalog, daily.view, release.view, stylesheet), parsed.out, result.catalog.projectRoot, 'quality-site-v1\n');
+    const history = await loadRunHistory(parsed, result.catalog, currentRun.data, idPattern);
+    await writeManagedFiles(renderQualitySite(result.catalog, daily.view, release.view, stylesheet, history), parsed.out, result.catalog.projectRoot, 'quality-site-v1\n');
     output.log(`dashboard build passed: ${parsed.out}`);
     return 0;
   }
@@ -178,7 +205,8 @@ export const executeCliCommand = async (parsed: CliArguments, output: CliOutput)
     const view = buildDailyView(result.catalog, currentResult.data, previousResult?.data);
     if (!view.ok) throw new Error(`daily view contains invalid run cases: ${view.problems.map(describeTestRunCatalogProblem).join('; ')}`);
     const stylesheet = await loadDashboardStyles(parsed.stylesheet);
-    await writeManagedFiles(renderDailySite(view.view, stylesheet), parsed.out, result.catalog.projectRoot, 'daily-v1\n');
+    const history = await loadRunHistory(parsed, result.catalog, currentResult.data, idPattern);
+    await writeManagedFiles(renderDailySite(view.view, stylesheet, false, history), parsed.out, result.catalog.projectRoot, 'daily-v1\n');
     output.log(`daily build passed: ${parsed.out}`);
     return 0;
   }
