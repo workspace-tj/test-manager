@@ -64,8 +64,12 @@ export const parseCaseFields = (
   for (const [name, rule] of Object.entries(rules)) shape[name] = rule.required ? schemaFor(rule, idPattern) : schemaFor(rule, idPattern).optional();
   const schema = z.strictObject(shape).superRefine((fields, context) => {
     for (const [name, rule] of Object.entries(rules)) {
-      if (rule.requiredWhen && fields[name] === undefined && (rule.requiredWhen.field === 'source' ? origin.source : rule.requiredWhen.field === 'layer' ? origin.layer : fields[rule.requiredWhen.field]) === rule.requiredWhen.equals) {
-        context.addIssue({ code: 'custom', path: [name], message: `TM121 required when ${rule.requiredWhen.field} equals ${JSON.stringify(rule.requiredWhen.equals)}` });
+      const condition = rule.requiredWhen;
+      if (!condition || fields[name] !== undefined) continue;
+      const actual = condition.field === 'source' ? origin.source : condition.field === 'layer' ? origin.layer : fields[condition.field];
+      if (condition.in.some((value) => value === actual)) {
+        const expected = condition.in.length === 1 ? `equals ${JSON.stringify(condition.in[0])}` : `is one of ${condition.in.map((value) => JSON.stringify(value)).join(', ')}`;
+        context.addIssue({ code: 'custom', path: [name], message: `TM121 required when ${condition.field} ${expected}` });
       }
     }
   });
