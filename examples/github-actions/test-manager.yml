@@ -21,11 +21,9 @@ jobs:
       TM_ENVIRONMENT: staging
       TM_SCOPE_ID: daily-all
       TM_ID_PATTERN: ^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$
-      TM_VITEST_UNIT_ID: vitest-unit-node
-      # Vitest reporterの必須オプション。TestRunのunit layerはcatalogのlayerから決まり、この値は使われない
-      TM_VITEST_LAYER: unit
+      # unit IDは「runner-layer-target」で、create-manifest.mjsとreporters.mjsが同じ規則で決める
       TM_VITEST_TARGET: node
-      TM_PLAYWRIGHT_UNIT_ID: playwright-e2e-chromium
+      TM_PLAYWRIGHT_LAYER: e2e
       TM_PLAYWRIGHT_TARGET: chromium
     steps:
       - name: Checkout current commit
@@ -89,10 +87,20 @@ jobs:
       - name: Create run manifest
         run: node "$TM_TOOL_DIR/examples/github-actions/create-manifest.mjs" --catalog "$TM_STATE_DIR/catalog/catalog.json" --id-pattern "$TM_ID_PATTERN" --out "$TM_STATE_DIR/manifest.json"
 
-      - name: Run Vitest
-        id: vitest
+      # test-manager.yamlのdiscovery.sourcesと同じ分け方で、layerごとに1回ずつ実行する
+      - name: Run Vitest unit tests
+        id: vitest-unit
         continue-on-error: true
-        run: pnpm vitest run
+        env:
+          TM_VITEST_LAYER: unit
+        run: pnpm vitest run --exclude '**/*.integration.test.ts'
+
+      - name: Run Vitest integration tests
+        id: vitest-integration
+        continue-on-error: true
+        env:
+          TM_VITEST_LAYER: integration
+        run: pnpm vitest run .integration.test.ts
 
       - name: Run Playwright
         id: playwright
@@ -142,6 +150,6 @@ jobs:
         if: always()
         shell: bash
         run: |
-          if [[ "${{ steps.vitest.outcome }}" != success || "${{ steps.playwright.outcome }}" != success ]]; then
+          if [[ "${{ steps.vitest-unit.outcome }}" != success || "${{ steps.vitest-integration.outcome }}" != success || "${{ steps.playwright.outcome }}" != success ]]; then
             exit 1
           fi

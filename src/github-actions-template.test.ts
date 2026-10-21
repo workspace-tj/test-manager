@@ -36,10 +36,7 @@ describe('GitHub Actions consumer template', () => {
         TM_SCOPE_ID: 'daily-all',
         TM_STARTED_AT: '2026-09-16T00:00:00Z',
         TM_CI_URL: 'https://github.com/example/project/actions/runs/1842',
-        TM_VITEST_UNIT_ID: 'vitest-unit-node',
-        TM_VITEST_LAYER: 'unit',
         TM_VITEST_TARGET: 'node',
-        TM_PLAYWRIGHT_UNIT_ID: 'playwright-e2e-chromium',
         TM_PLAYWRIGHT_TARGET: 'chromium',
         GITHUB_TOKEN: 'must-not-be-saved',
       },
@@ -56,19 +53,32 @@ describe('GitHub Actions consumer template', () => {
     ]);
   });
 
-  it('refuses to merge one runner across several catalog layers into a single unit', async () => {
+  it('splits one runner into a unit per catalog layer with IDs the reporters derive the same way', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-ci-template-layers-'));
     const catalogFile = path.join(root, 'catalog.json');
     const outputFile = path.join(root, 'manifest.json');
-    await writeFile(catalogFile, JSON.stringify({ cases: [{ id: 'CASE-001', source: 'vitest', layer: 'unit' }, { id: 'CASE-002', source: 'vitest', layer: 'integration' }] }), 'utf8');
-    await expect(executeFile(process.execPath, [generator, '--catalog', catalogFile, '--id-pattern', '^CASE-[0-9]{3}$', '--out', outputFile], {
+    await writeFile(catalogFile, JSON.stringify({ cases: [
+      { id: 'CASE-001', source: 'vitest', layer: 'unit' },
+      { id: 'CASE-002', source: 'vitest', layer: 'integration' },
+      { id: 'CASE-003', source: 'vitest', layer: 'unit' },
+    ] }), 'utf8');
+    await executeFile(process.execPath, [generator, '--catalog', catalogFile, '--id-pattern', '^CASE-[0-9]{3}$', '--out', outputFile], {
       env: {
         PATH: process.env.PATH, TM_TOOL_DIR: path.resolve('.'), TM_RUN_ID: '1842', TM_RUN_ATTEMPT: '1', TM_ENVIRONMENT: 'staging', TM_COMMIT: '7f3a12c',
         TM_SCOPE_ID: 'daily-all', TM_STARTED_AT: '2026-09-16T00:00:00Z', TM_CI_URL: 'https://github.com/example/project/actions/runs/1842',
-        TM_VITEST_UNIT_ID: 'vitest-unit-node', TM_VITEST_TARGET: 'node',
+        TM_VITEST_TARGET: 'node',
       },
-    })).rejects.toThrow(/span layers unit, integration/u);
-    await expect(readFile(outputFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+    const manifest = JSON.parse(await readFile(outputFile, 'utf8'));
+    expect(manifest.units).toEqual([
+      { unitId: 'vitest-integration-node', runner: 'vitest', layer: 'integration', target: 'node', plannedCaseIds: ['CASE-002'] },
+      { unitId: 'vitest-unit-node', runner: 'vitest', layer: 'unit', target: 'node', plannedCaseIds: ['CASE-001', 'CASE-003'] },
+    ]);
+    const helpers = await import(pathToFileURL(reporterHelpers).href);
+    const reporterIds = ['unit', 'integration'].map((layer) => helpers.testManagerVitestReporter({
+      toolDirectory: root, stateDirectory: root, layer, target: 'node', idPattern: /^CASE-/u,
+    })[1].unitId);
+    expect(reporterIds).toEqual(['vitest-unit-node', 'vitest-integration-node']);
   });
 
   it('fails before writing when required explicit CI values are missing', async () => {
@@ -99,11 +109,9 @@ describe('GitHub Actions consumer template', () => {
         TM_SCOPE_ID: '../scope',
         TM_STARTED_AT: '2026-09-16T00:00:00Z',
         TM_CI_URL: 'https://github.com/example/project/actions/runs/1842',
-        TM_VITEST_UNIT_ID: '../unit',
-        TM_VITEST_LAYER: 'unit',
-        TM_VITEST_TARGET: 'node',
+        TM_VITEST_TARGET: '../node',
       },
-    })).rejects.toThrow(/invalid manifest/u);
+    })).rejects.toThrow(/invalid manifest: unitId "vitest-unit-\.\.\/node"/u);
     await expect(readFile(outputFile, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
@@ -157,10 +165,10 @@ describe('GitHub Actions consumer template', () => {
     const stateDirectory = path.resolve('/tmp/test-manager-state');
     const toolDirectory = path.resolve('/tmp/test-manager-tool');
     const vitest = helpers.testManagerVitestReporter({
-      toolDirectory, stateDirectory, unitId: 'vitest-unit-node', layer: 'unit', target: 'node', idPattern: /^CASE-/u,
+      toolDirectory, stateDirectory, layer: 'unit', target: 'node', idPattern: /^CASE-/u,
     });
     const playwright = helpers.testManagerPlaywrightReporter({
-      toolDirectory, stateDirectory, unitId: 'playwright-e2e-chromium', idPattern: /^CASE-/u,
+      toolDirectory, stateDirectory, layer: 'e2e', target: 'chromium', idPattern: /^CASE-/u,
     });
 
     expect(vitest).toMatchObject([
@@ -179,8 +187,11 @@ describe('GitHub Actions consumer template', () => {
     ]);
 
     expect(() => helpers.testManagerVitestReporter({
-      toolDirectory, stateDirectory, unitId: '../outside', layer: 'unit', target: 'node', idPattern: /^CASE-/u,
+      toolDirectory, stateDirectory, layer: '../outside', target: 'node', idPattern: /^CASE-/u,
     })).toThrow(/unitId/u);
+    expect(() => helpers.testManagerPlaywrightReporter({
+      toolDirectory, stateDirectory, target: 'chromium', idPattern: /^CASE-/u,
+    })).toThrow(/layer is required/u);
   });
 
   it('pins the tool checkout, publishes the dashboard, and never serializes the GitHub context', async () => {
@@ -191,6 +202,9 @@ describe('GitHub Actions consumer template', () => {
     expect(workflow).not.toContain('path: production-source');
     expect(workflow).toContain('create-manifest.mjs');
     expect(workflow).toContain('playwright test --project=chromium');
+    expect(workflow).toContain("vitest run --exclude '**/*.integration.test.ts'");
+    expect(workflow).toContain('vitest run .integration.test.ts');
+    expect(workflow).toContain('steps.vitest-integration.outcome');
     expect(workflow).toContain('assemble-run.mjs');
     expect(workflow).toContain('dashboard');
     expect(workflow).toContain('actions/upload-artifact@v4');
