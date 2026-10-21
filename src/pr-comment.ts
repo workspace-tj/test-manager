@@ -14,7 +14,10 @@ const escapeMarkdown = (value: string): string => value
   .replace(/\s*\r?\n\s*/gu, ' ');
 
 // Long texts such as a changed purpose are shortened; the comment shows that and how a value changed, not the full text.
-const clip = (value: string): string => value.length > 40 ? `${value.slice(0, 40)}…` : value;
+const clip = (value: string): string => {
+  const characters = Array.from(value);
+  return characters.length > 40 ? `${characters.slice(0, 40).join('')}…` : value;
+};
 
 const layerText = (change: ReleaseCaseChange): string => change.previousLayer === undefined ? change.layer : `${change.previousLayer} → ${change.layer}`;
 

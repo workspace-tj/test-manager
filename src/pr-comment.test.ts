@@ -51,6 +51,28 @@ describe('pull request comment', () => {
     expect(comment).toContain(`\n  - belongsTo: ${membership?.title} → ${otherDocument.title}、影響度: 主要目的 → 限定的、reason: old → なし`);
   });
 
+  it('names each side with its own labels and titles, and ignores reordered refs and key order', async () => {
+    const catalog = await fixture();
+    const [first] = catalog.cases;
+    const membership = catalog.documents.find((document) => document.id === first?.fields.belongsTo);
+    if (!first || !membership) throw new Error('fixture must contain a case and its document');
+    const rename = (title: string) => ({ ...catalog, documents: catalog.documents.map((document) => document.id === membership.id ? { ...document, title } : document) });
+    const before = { ...first, fields: { ...first.fields, note: membership.id }, details: { ...first.details, order: { a: 1, b: 2 } } } as typeof first;
+    const after = { ...first, fields: { ...first.fields, note: membership.id, impact: 2 }, details: { ...first.details, order: { b: 2, a: 1 } } } as typeof first;
+    const base = createReleaseCatalogSnapshot({ ...rename('旧タイトル'), cases: [before] }, '6e2b11a');
+    const head = createReleaseCatalogSnapshot({ ...rename('新タイトル'), cases: [{ ...after, fields: { ...after.fields, belongsTo: membership.id } } as typeof first] }, '7f3a12c');
+    const diff = buildReleaseDiff({ production: base, staging: { snapshot: head } });
+    if (!diff.ok) throw new Error(diff.problems.join('; '));
+    const changes = diff.view.groups.flatMap((group) => group.changes).flatMap((change) => change.fieldChanges ?? []);
+    expect(changes.map((item) => item.field)).toEqual(['impact']);
+    const longValue = 'あ'.repeat(39) + '𠮷' + 'い';
+    const longBase = createReleaseCatalogSnapshot({ ...catalog, cases: [{ ...first, details: { reason: 'x' } } as typeof first] }, '6e2b11a');
+    const longHead = createReleaseCatalogSnapshot({ ...catalog, cases: [{ ...first, details: { reason: longValue } } as typeof first] }, '7f3a12c');
+    const longDiff = buildReleaseDiff({ production: longBase, staging: { snapshot: longHead } });
+    if (!longDiff.ok) throw new Error(longDiff.problems.join('; '));
+    expect(renderPrComment(longDiff.view)).toContain(`reason: x → ${'あ'.repeat(39)}𠮷…`);
+  });
+
   it('stays under the GitHub comment limit by omitting the remaining rows', async () => {
     const catalog = await fixture();
     const template = catalog.cases[0];

@@ -180,24 +180,36 @@ export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => 
     const previousLayer = previousById.get(managedCase.id)?.layer;
     return previousLayer !== undefined && previousLayer !== managedCase.layer ? { previousLayer } : {};
   };
+  // Each side's value is named with that side's own labels and document titles, so renamed values stay visible.
+  const sideNamer = (snapshot: ReleaseCatalogSnapshot, other: ReleaseCatalogSnapshot) => {
+    const titles = new Map(snapshot.documents.map((document) => [document.id, document.title]));
+    const otherTitles = new Map(other.documents.map((document) => [document.id, document.title]));
+    return (field: string, value: unknown): string => {
+      if (value === undefined) return 'なし';
+      const rule = snapshot.fieldLabels?.[field] ?? other.fieldLabels?.[field];
+      const one = (item: unknown): string => {
+        if (typeof item !== 'string' && typeof item !== 'number') return JSON.stringify(item);
+        if (rule?.kind === 'enum') return snapshot.fieldLabels?.[field]?.values?.[String(item)] ?? other.fieldLabels?.[field]?.values?.[String(item)] ?? String(item);
+        if (rule?.kind === 'reference') return titles.get(String(item)) ?? otherTitles.get(String(item)) ?? String(item);
+        return String(item);
+      };
+      return Array.isArray(value) ? value.map(one).join('、') || 'なし' : one(value);
+    };
+  };
+  const nameBefore = sideNamer(input.production, input.staging.snapshot);
+  const nameAfter = sideNamer(input.staging.snapshot, input.production);
+  const comparable = (field: string, value: unknown): string => JSON.stringify(canonicalize(field === 'refs' && Array.isArray(value) ? value.toSorted() : value));
   const fieldChanges = (managedCase: ReleaseCatalogCase): Readonly<{ fieldChanges?: ReadonlyArray<ReleaseFieldChange> }> => {
     const previous = previousById.get(managedCase.id);
     if (!previous) return {};
-    const labels = { ...input.production.fieldLabels, ...input.staging.snapshot.fieldLabels };
-    const titles = new Map([...input.production.documents, ...input.staging.snapshot.documents].map((document) => [document.id, document.title]));
-    const show = (field: string, value: unknown): string => {
-      if (value === undefined) return 'なし';
-      const one = (item: unknown): string => typeof item === 'string' || typeof item === 'number'
-        ? labels[field]?.values?.[String(item)] ?? titles.get(String(item)) ?? String(item)
-        : JSON.stringify(item);
-      return Array.isArray(value) ? value.map(one).join('、') || 'なし' : one(value);
-    };
-    const before = { ...previous.fields, ...previous.details };
-    const after = { ...managedCase.fields, ...managedCase.details };
-    const names = [...new Set([...Object.keys(before), ...Object.keys(after)])];
-    const changed = names.filter((name) => JSON.stringify(before[name]) !== JSON.stringify(after[name])).map((name) => ({
-      field: name, label: labels[name]?.label ?? name, before: show(name, before[name]), after: show(name, after[name]),
-    }));
+    const labelOf = (field: string): string => input.staging.snapshot.fieldLabels?.[field]?.label ?? input.production.fieldLabels?.[field]?.label ?? field;
+    const changed = (['fields', 'details'] as const).flatMap((part) => {
+      const before: Readonly<Record<string, unknown>> = previous[part];
+      const after: Readonly<Record<string, unknown>> = managedCase[part];
+      return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+        .filter((name) => comparable(name, before[name]) !== comparable(name, after[name]))
+        .map((name) => ({ field: name, label: labelOf(name), before: nameBefore(name, before[name]), after: nameAfter(name, after[name]) }));
+    });
     return changed.length > 0 ? { fieldChanges: changed } : {};
   };
   const grouped = new Map<string, ReleaseGroup>();

@@ -27,7 +27,7 @@ const snapshotShape = z.strictObject({
   })),
   cases: z.array(releaseCaseSchema),
   // How the project names its case fields and enum values, so diffs can show readable before/after values.
-  fieldLabels: z.record(z.string(), z.strictObject({ label: z.string().optional(), values: z.record(z.string(), z.string()).optional() })).optional(),
+  fieldLabels: z.record(z.string(), z.strictObject({ label: z.string().optional(), kind: z.enum(['enum', 'reference', 'other']).optional(), values: z.record(z.string(), z.string()).optional() })).optional(),
 });
 
 export type ReleaseCatalogSnapshot = z.infer<typeof snapshotShape>;
@@ -82,6 +82,7 @@ export const createReleaseCatalogSnapshot = (catalog: Catalog, commit: string): 
   cases: catalog.cases.map(semanticCase),
   fieldLabels: Object.fromEntries(Object.entries(catalog.rules.case.fields).map(([name, rule]) => [name, {
     ...(rule.label === undefined ? {} : { label: rule.label }),
+    kind: rule.type === 'enum' || rule.type === 'integer-enum' ? 'enum' : rule.type === 'reference' || rule.type === 'reference-list' ? 'reference' : 'other',
     ...(rule.type === 'enum' || rule.type === 'integer-enum' ? { values: Object.fromEntries(Object.entries(rule.values).map(([key, value]) => [key, value.label ?? key])) } : {}),
   }])),
 });
