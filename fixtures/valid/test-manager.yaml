@@ -3,18 +3,13 @@ idPattern: "^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$"
 discovery:
   documents: ["knowledge/**/*.md"]
   sources:
-    - kind: manual
-      layer: e2e
-      paths: ["knowledge/**/*.manual.yaml"]
-    - kind: vitest
-      layer: unit
-      paths: ["src/**/*.test.ts"]
-    - kind: playwright
-      layer: e2e
-      paths: ["journeys/**/*.spec.ts"]
-    - kind: storybook
-      layer: ui
-      paths: ["src/**/*.stories.tsx"]
+    e2e:
+      manual: ["knowledge/**/*.manual.yaml"]
+      playwright: ["journeys/**/*.spec.ts"]
+    unit:
+      vitest: ["src/**/*.test.ts"]
+    ui:
+      storybook: ["src/**/*.stories.tsx"]
 documents:
   kinds:
     domain:
