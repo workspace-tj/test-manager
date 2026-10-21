@@ -94,7 +94,7 @@ E2Eの画面操作は `src/quality-site.e2e.pages.ts` の薄いPage Objectへ集
 
 リリース差分では、productionとstagingの各checkoutで `snapshot --config <path> --commit <sha> --out <path>` を実行します。その `release-catalog.json` 2件を `release --production-snapshot <path> --staging-snapshot <path> --out <path>` へ渡します。stagingの実行事実も表示する場合は、同じcommit・`staging`環境のrunを `--latest-staging-run` で指定します。
 
-PRごとの差分は `pr-comment --base-snapshot <path> --head-snapshot <path> [--out <path>]` で、追加・変更・削除されたケースをdomain・featureごとに並べたMarkdownとして出力できます。投稿はCIなど利用側が行います（[GitHub Actions導入例](examples/github-actions/README.md#prへケースの変更をコメントする)）。
+PRごとの差分は `pr-comment --base-snapshot <path> --head-snapshot <path> [--out <path>]` で、追加・変更・削除されたケースをdomain・featureごとに並べたMarkdownとして出力できます。変更したケースには、値が変わった項目を「重要度: S → A」のように、項目と値の表示名で添えます。所属する機能の付け替えや重要度の上げ下げを、レビューで見落とさないためです。長い文は40文字で切ります。投稿はCIなど利用側が行います（[GitHub Actions導入例](examples/github-actions/README.md#prへケースの変更をコメントする)）。
 
 手動ケースの実施結果は `--manual-results <path>` で渡します（`release`・`dashboard`、複数指定可）。記録した場所や外部ツールは問わず、次の形式のJSONへ変換して渡します。
 

@@ -30,6 +30,27 @@ describe('pull request comment', () => {
     expect(comment).toContain('網羅性やマージ可否は判定しません。');
   });
 
+  it('shows how each case field changed, with project labels and document titles', async () => {
+    const catalog = await fixture();
+    const [first] = catalog.cases;
+    if (!first) throw new Error('fixture must contain a case');
+    const otherDocument = catalog.documents.find((document) => document.id !== first.fields.belongsTo && document.parent !== undefined) ?? catalog.documents.find((document) => document.id !== first.fields.belongsTo);
+    if (!otherDocument) throw new Error('fixture must contain another document');
+    const labelled = {
+      ...catalog,
+      rules: { ...catalog.rules, case: { fields: { ...catalog.rules.case.fields, impact: { required: true as const, placement: 'classification' as const, type: 'integer-enum' as const, label: '影響度', values: { 1: { label: '限定的', description: 'a' }, 2: { label: '主要操作', description: 'b' }, 3: { label: '主要目的', description: 'c' } } } } } },
+    };
+    const before = { ...first, fields: { ...first.fields, impact: 3 }, details: { ...first.details, reason: 'old' } } as typeof first;
+    const after = { ...first, fields: { ...first.fields, belongsTo: otherDocument.id, impact: 1 }, details: { ...first.details } } as typeof first;
+    const base = createReleaseCatalogSnapshot({ ...labelled, cases: [before] }, '6e2b11a');
+    const head = createReleaseCatalogSnapshot({ ...labelled, cases: [after] }, '7f3a12c');
+    const diff = buildReleaseDiff({ production: base, staging: { snapshot: head } });
+    if (!diff.ok) throw new Error(diff.problems.join('; '));
+    const membership = catalog.documents.find((document) => document.id === first.fields.belongsTo);
+    const comment = renderPrComment(diff.view);
+    expect(comment).toContain(`\n  - belongsTo: ${membership?.title} → ${otherDocument.title}、影響度: 主要目的 → 限定的、reason: old → なし`);
+  });
+
   it('stays under the GitHub comment limit by omitting the remaining rows', async () => {
     const catalog = await fixture();
     const template = catalog.cases[0];

@@ -21,12 +21,16 @@ type Verification = Readonly<
   | { kind: 'automated'; source: Exclude<ReleaseCatalogCase['source'], 'manual'>; latest: LatestResult }
 >;
 
+// One case field whose value differs between the compared snapshots, already rendered as readable text.
+export type ReleaseFieldChange = Readonly<{ field: string; label: string; before: string; after: string }>;
+
 export type ReleaseCaseChange = Readonly<{
   kind: 'added' | 'changed' | 'removed';
   caseId: string;
   title: string;
   layer: string;
   previousLayer?: string;
+  fieldChanges?: ReadonlyArray<ReleaseFieldChange>;
   verification: Verification;
 }>;
 
@@ -176,6 +180,26 @@ export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => 
     const previousLayer = previousById.get(managedCase.id)?.layer;
     return previousLayer !== undefined && previousLayer !== managedCase.layer ? { previousLayer } : {};
   };
+  const fieldChanges = (managedCase: ReleaseCatalogCase): Readonly<{ fieldChanges?: ReadonlyArray<ReleaseFieldChange> }> => {
+    const previous = previousById.get(managedCase.id);
+    if (!previous) return {};
+    const labels = { ...input.production.fieldLabels, ...input.staging.snapshot.fieldLabels };
+    const titles = new Map([...input.production.documents, ...input.staging.snapshot.documents].map((document) => [document.id, document.title]));
+    const show = (field: string, value: unknown): string => {
+      if (value === undefined) return 'なし';
+      const one = (item: unknown): string => typeof item === 'string' || typeof item === 'number'
+        ? labels[field]?.values?.[String(item)] ?? titles.get(String(item)) ?? String(item)
+        : JSON.stringify(item);
+      return Array.isArray(value) ? value.map(one).join('、') || 'なし' : one(value);
+    };
+    const before = { ...previous.fields, ...previous.details };
+    const after = { ...managedCase.fields, ...managedCase.details };
+    const names = [...new Set([...Object.keys(before), ...Object.keys(after)])];
+    const changed = names.filter((name) => JSON.stringify(before[name]) !== JSON.stringify(after[name])).map((name) => ({
+      field: name, label: labels[name]?.label ?? name, before: show(name, before[name]), after: show(name, after[name]),
+    }));
+    return changed.length > 0 ? { fieldChanges: changed } : {};
+  };
   const grouped = new Map<string, ReleaseGroup>();
   for (const change of changes) {
     const documents = new Map(change.snapshot.documents.map((document) => [document.id, document]));
@@ -190,6 +214,7 @@ export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => 
       title: change.managedCase.title,
       layer: change.managedCase.layer,
       ...layerMove(change.managedCase),
+      ...(change.kind === 'changed' ? fieldChanges(change.managedCase) : {}),
       verification: verificationFor(change.managedCase, input.staging.latestRun, change.kind === 'removed', manualRecords),
     };
     const existing = grouped.get(key);

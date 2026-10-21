@@ -26,6 +26,8 @@ const snapshotShape = z.strictObject({
     id: IdentifierSchema, kind: z.string().min(1), title: z.string().min(1), parent: IdentifierSchema.optional(),
   })),
   cases: z.array(releaseCaseSchema),
+  // How the project names its case fields and enum values, so diffs can show readable before/after values.
+  fieldLabels: z.record(z.string(), z.strictObject({ label: z.string().optional(), values: z.record(z.string(), z.string()).optional() })).optional(),
 });
 
 export type ReleaseCatalogSnapshot = z.infer<typeof snapshotShape>;
@@ -78,6 +80,10 @@ export const createReleaseCatalogSnapshot = (catalog: Catalog, commit: string): 
     id: document.id, kind: document.kind, title: document.title, ...(document.parent === undefined ? {} : { parent: document.parent }),
   })),
   cases: catalog.cases.map(semanticCase),
+  fieldLabels: Object.fromEntries(Object.entries(catalog.rules.case.fields).map(([name, rule]) => [name, {
+    ...(rule.label === undefined ? {} : { label: rule.label }),
+    ...(rule.type === 'enum' || rule.type === 'integer-enum' ? { values: Object.fromEntries(Object.entries(rule.values).map(([key, value]) => [key, value.label ?? key])) } : {}),
+  }])),
 });
 
 export const parseReleaseCatalogSnapshot = (input: unknown) => snapshotShape.superRefine((snapshot, context) => {
