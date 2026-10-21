@@ -44,6 +44,6 @@ describe('project initialization', () => {
   it('keeps the published JSON Schema in sync with the configuration parser', async () => {
     const published: unknown = JSON.parse(await readFile(path.resolve('schema/test-manager.schema.json'), 'utf8'));
     expect(published, 'run `pnpm schema` to regenerate schema/test-manager.schema.json').toEqual(rulesJsonSchema());
-    expect(JSON.stringify(published)).toContain('"layer"');
+    expect(JSON.stringify(published)).toContain('"playwright"');
   });
 });

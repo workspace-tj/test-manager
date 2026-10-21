@@ -54,6 +54,20 @@ const FieldRuleSchema = z.discriminatedUnion('type', [
   if (field.required && field.requiredWhen) context.addIssue({ code: 'custom', message: 'required and requiredWhen are mutually exclusive' });
 });
 
+const GlobsSchema = z.array(z.string().min(1)).min(1);
+
+// One layer and the files each case source reads for it; a layer is the key, so it is always present.
+const LayerSourcesSchema = z.object({
+  description: z.string().min(1).optional(),
+  ...Object.fromEntries(caseSources.map((kind) => [kind, GlobsSchema.optional()])) as Record<typeof caseSources[number], z.ZodOptional<typeof GlobsSchema>>,
+}).strict().refine((layer) => caseSources.some((kind) => layer[kind] !== undefined), 'a layer must list files for at least one source kind')
+  .meta({ anyOf: caseSources.map((kind) => ({ required: [kind] })) });
+
+// Integer-like keys are reordered by JavaScript objects, which would lose the written layer order.
+// The check runs in validateRuleRelationships so the diagnostic can name the reason; the pattern only informs editors.
+const integerName = /^(?:0|[1-9][0-9]*)$/u;
+const LayerNameSchema = z.string().min(1).meta({ pattern: '^(?!(?:0|[1-9][0-9]*)$)' });
+
 const RulesShape = z.object({
   version: z.literal(1),
   idPattern: z.string().min(1).refine((value) => {
@@ -61,11 +75,7 @@ const RulesShape = z.object({
   }, 'must be a valid regular expression'),
   discovery: z.object({
     documents: z.array(z.string().min(1)).min(1),
-    sources: z.array(z.object({
-      kind: z.enum(caseSources),
-      layer: z.string().min(1),
-      paths: z.array(z.string().min(1)).min(1),
-    }).strict()),
+    sources: z.record(LayerNameSchema, LayerSourcesSchema),
   }).strict(),
   documents: z.object({
     kinds: z.record(z.string(), KindRuleSchema),
@@ -85,7 +95,10 @@ const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z
   const refs = rules.case.fields.refs;
   if (refs && refs.type !== 'reference-list') context.addIssue({ code: 'custom', path: ['case', 'fields', 'refs'], message: 'refs must be a reference-list field' });
   if (refs?.placement === 'detail') context.addIssue({ code: 'custom', path: ['case', 'fields', 'refs', 'placement'], message: 'refs must be a classification field' });
-  const layers = [...new Set(rules.discovery.sources.map((source) => source.layer))];
+  const layers = Object.keys(rules.discovery.sources);
+  for (const layer of layers) if (integerName.test(layer)) {
+    context.addIssue({ code: 'custom', path: ['discovery', 'sources', layer], message: 'layer name must not be an integer, which would change the written order' });
+  }
   for (const [name, field] of Object.entries(rules.case.fields)) {
     if (field.type === 'enum' && field.playwrightTag !== undefined && field.placement !== 'classification') {
       context.addIssue({ code: 'custom', path: ['case', 'fields', name, 'playwrightTag'], message: 'playwrightTag requires a classification field' });
@@ -167,6 +180,15 @@ const normalizeFieldRules = (fields: z.infer<typeof RulesShape>['case']['fields'
   return normalized;
 };
 
+const normalizeDiscovery = (discovery: z.infer<typeof RulesShape>['discovery']): ProjectRules['discovery'] => ({
+  documents: discovery.documents,
+  layers: Object.entries(discovery.sources).map(([name, layer]) => ({ name, ...(layer.description !== undefined ? { description: layer.description } : {}) })),
+  sources: Object.entries(discovery.sources).flatMap(([layer, sources]) => caseSources.flatMap((kind) => {
+    const paths = sources[kind];
+    return paths ? [{ kind, layer, paths }] : [];
+  })),
+});
+
 export const loadRules = async (
   configPath: string,
 ): Promise<Readonly<{ rules?: ProjectRules; diagnostics: ReadonlyArray<Diagnostic> }>> => {
@@ -192,5 +214,5 @@ export const loadRules = async (
   } catch (error) {
     return { diagnostics: [diagnostic('TM003', absolute, 'idPattern', `invalid regular expression: ${String(error)}`)] };
   }
-  return { rules: { ...result.data, case: { fields: normalizeFieldRules(result.data.case.fields) } }, diagnostics: [] };
+  return { rules: { ...result.data, discovery: normalizeDiscovery(result.data.discovery), case: { fields: normalizeFieldRules(result.data.case.fields) } }, diagnostics: [] };
 };
