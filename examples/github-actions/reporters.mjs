@@ -11,8 +11,9 @@ const requiredPattern = (options) => {
   return options.idPattern;
 };
 
-const requiredUnitId = (options) => {
-  const unitId = required(options, 'unitId');
+// Must match the unit ID that create-manifest.mjs derives from the catalog.
+const requiredUnitId = (runner, options) => {
+  const unitId = `${runner}-${required(options, 'layer')}-${required(options, 'target')}`;
   if (!/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,127})$/u.test(unitId)) throw new Error('unitId contains unsupported characters');
   return unitId;
 };
@@ -20,7 +21,7 @@ const requiredUnitId = (options) => {
 export const testManagerVitestReporter = (options) => {
   const toolDirectory = path.resolve(required(options, 'toolDirectory'));
   const stateDirectory = path.resolve(required(options, 'stateDirectory'));
-  const unitId = requiredUnitId(options);
+  const unitId = requiredUnitId('vitest', options);
   return [path.join(toolDirectory, 'dist/vitest-adapter.js'), {
     outputFile: path.join(stateDirectory, 'unit-artifacts', `${unitId}.test-manager-unit.json`),
     artifactRoot: path.join(stateDirectory, 'runner-artifacts'),
@@ -37,7 +38,7 @@ export const testManagerPlaywrightReporter = (options) => {
   return [path.join(toolDirectory, 'dist/playwright-adapter.js'), {
     outputDirectory: path.join(stateDirectory, 'unit-artifacts'),
     artifactRoot: path.join(stateDirectory, 'runner-artifacts'),
-    unitId: requiredUnitId(options),
+    unitId: requiredUnitId('playwright', options),
     idPattern: requiredPattern(options),
   }];
 };

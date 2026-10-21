@@ -8,11 +8,35 @@
 2. GitHub Actions Variablesへ次の値を登録します。
    - `TEST_MANAGER_REF`: 使用するtest-managerの40文字commit SHA。helperを読み込むため、`examples/github-actions/`を含むcommit以降を指定します
    - `TEST_MANAGER_PRODUCTION_REF`: 比較元にするconsumerリポジトリのproduction commit SHA。このcommitにも`test-manager.yaml`が必要です
-3. workflowの`TM_ID_PATTERN`、environment、scope、unit ID、targetをconsumerに合わせます。`TM_ID_PATTERN`は`test-manager.yaml`の`rules.idPattern`と同じ値にします。
+3. workflowの`TM_ID_PATTERN`、environment、scope、targetをconsumerに合わせます。`TM_PLAYWRIGHT_LAYER`は、`discovery.sources`でPlaywrightに付けたlayerと同じ値にします。`TM_ID_PATTERN`は`test-manager.yaml`の`rules.idPattern`と同じ値にします。
 4. 下記のreporter設定を既存のVitest・Playwright設定へ組み込みます。
-5. workflow内の`pnpm vitest run`と`pnpm playwright test --project=chromium`を、consumerで普段使う実行コマンドへ必要に応じて置き換えます。Playwrightのproject名を変える場合は`TM_PLAYWRIGHT_TARGET`も同じ実行対象を表す値へ揃えます。
+5. workflow内のVitestの2つの実行コマンドと`pnpm playwright test --project=chromium`を、consumerで普段使う実行コマンドへ必要に応じて置き換えます。Playwrightのproject名を変える場合は`TM_PLAYWRIGHT_TARGET`も同じ実行対象を表す値へ揃えます。
 
-実行unitのlayerは、`create-manifest.mjs`がcatalogの各ケースの`layer`から決めます。`dashboard`は、unitのlayerと計画したケースのlayerが一致しない実行結果を拒否します。この例はrunnerごとに1unitへまとめるため、同じrunnerのケースが複数layerにまたがるとmanifest作成で失敗します。その場合はVitestの`projects`などでlayerごとに実行を分け、unitもlayerごとに作るよう例を拡張してください。`TM_VITEST_LAYER`はVitest reporterの必須オプションですが、unit artifactには記録されず、TestRunのlayerには使われません。紛らわしさを避けるためcatalogのlayerと同じ値にしておきます。
+## layerごとの実行
+
+この例は、Vitestでunitとintegrationの2つのlayerを書くリポジトリを想定しています。`test-manager.yaml`の`discovery.sources`は次のように分けておきます。
+
+```yaml
+discovery:
+  sources:
+    - kind: vitest
+      layer: unit
+      paths: ['src/**/!(*.integration).test.ts']
+    - kind: vitest
+      layer: integration
+      paths: ['src/**/*.integration.test.ts']
+    - kind: playwright
+      layer: e2e
+      paths: ['e2e/**/*.e2e.ts']
+```
+
+- `create-manifest.mjs`は、catalogのケースをrunnerとlayerの組ごとに1つのunitへまとめます。unit IDは`<runner>-<layer>-<target>`（例: `vitest-integration-node`）です
+- reporterも同じ規則でunit IDを決めるため、workflowの各実行stepでは`TM_VITEST_LAYER`だけを変えます。unit IDを別に書く必要はありません
+- 実行の分け方は`discovery.sources`のpathsと揃えます。この例では`--exclude '**/*.integration.test.ts'`でunitを、`.integration.test.ts`を含むファイルだけでintegrationを実行します
+- catalogにあるlayerの実行stepを忘れると、そのunitは`artifactMissing`になります。catalogにないlayerを実行すると、manifestにないunitとして統合で失敗します。integrationのケースがないリポジトリでは、integrationのstepを消してください。残すと、Vitestがテストファイルを見つけられずに失敗し、jobも失敗します
+- layerとtargetはunit IDの一部になるため、英数字と`.`、`_`、`-`だけで書きます
+- Playwrightは1回だけ実行するため、Playwrightのケースは1つのlayerにまとめます。複数のlayerに分ける場合は、Vitestと同じようにlayerごとの実行stepを足します
+- `dashboard`は、unitのlayerと計画したケースのlayerが一致しない実行結果を拒否します
 
 どちらの参照もbranchやtagではなくfull SHAに固定します。production checkoutはconsumerのworkspace外へ作成するため、current catalogのglobやテスト探索へproduction側のファイルは混入しません。
 
@@ -42,7 +66,6 @@ export default defineConfig({
       ...(testManagerVitestReporter ? [testManagerVitestReporter({
           toolDirectory,
           stateDirectory,
-          unitId: process.env.TM_VITEST_UNIT_ID,
           layer: process.env.TM_VITEST_LAYER,
           target: process.env.TM_VITEST_TARGET,
           idPattern: new RegExp(process.env.TM_ID_PATTERN, 'u'),
@@ -77,7 +100,8 @@ export default defineConfig({
     ...(testManagerPlaywrightReporter ? [testManagerPlaywrightReporter({
         toolDirectory,
         stateDirectory,
-        unitId: process.env.TM_PLAYWRIGHT_UNIT_ID,
+        layer: process.env.TM_PLAYWRIGHT_LAYER,
+        target: process.env.TM_PLAYWRIGHT_TARGET,
         idPattern: new RegExp(process.env.TM_ID_PATTERN, 'u'),
       })] : []),
   ],
@@ -88,7 +112,7 @@ export default defineConfig({
 
 attachmentは`TM_STATE_DIR/runner-artifacts`配下だけに置きます。reporterはこのroot外への参照を受け付けません。
 
-この例はVitest 1 unitとPlaywright 1 unitを対象にしています。targetやshardを複数unitとして実行する場合は、各unitに一意なunit IDを割り当て、その全unitをmanifest作成時に確定する必要があります。
+この例のunitは、runnerとlayerの組ごとに1つです。同じlayerをtargetやshardで複数unitに分けて実行する場合は、各unitに一意なunit IDを割り当て、その全unitをmanifest作成時に確定するよう例を拡張してください。
 
 ## 失敗時の扱い
 
