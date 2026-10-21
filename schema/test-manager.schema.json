@@ -24,24 +24,44 @@
           }
         },
         "sources": {
-          "type": "array",
-          "items": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!(?:0|[1-9][0-9]*)$)"
+          },
+          "additionalProperties": {
             "type": "object",
             "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "manual",
-                  "vitest",
-                  "playwright",
-                  "storybook"
-                ]
-              },
-              "layer": {
+              "description": {
                 "type": "string",
                 "minLength": 1
               },
-              "paths": {
+              "manual": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "vitest": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "playwright": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "storybook": {
                 "minItems": 1,
                 "type": "array",
                 "items": {
@@ -50,12 +70,29 @@
                 }
               }
             },
-            "required": [
-              "kind",
-              "layer",
-              "paths"
-            ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "manual"
+                ]
+              },
+              {
+                "required": [
+                  "vitest"
+                ]
+              },
+              {
+                "required": [
+                  "playwright"
+                ]
+              },
+              {
+                "required": [
+                  "storybook"
+                ]
+              }
+            ]
           }
         }
       },

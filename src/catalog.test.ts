@@ -67,10 +67,10 @@ describe('project catalog', () => {
     expect(result.catalog.documents.find((item) => item.id === 'orders')?.refs).toEqual(['catalog']);
     expect(result.catalog.cases.map((item) => [item.id, item.source, item.status])).toEqual([
       ['CASE-101', 'manual', 'active'],
+      ['CASE-201', 'playwright', 'active'],
       ['CASE-001', 'vitest', 'active'],
       ['CASE-002', 'vitest', 'active'],
       ['CASE-003', 'vitest', 'todo'],
-      ['CASE-201', 'playwright', 'active'],
       ['CASE-301', 'storybook', 'skip'],
     ]);
     const eachCase = result.catalog.cases.find((item) => item.id === 'CASE-002');
@@ -81,7 +81,7 @@ describe('project catalog', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-alternate-project-'));
     const config = (await readFile(path.resolve('fixtures/alternate-rules.yaml'), 'utf8'))
       .replace('fixtures/none/**/*.md', 'knowledge/**/*.md')
-      .replace('sources: []', 'sources:\n    - { kind: manual, layer: manual, paths: ["knowledge/**/*.manual.yaml"] }');
+      .replace('sources: {}', 'sources:\n    manual:\n      manual: ["knowledge/**/*.manual.yaml"]');
     await import('node:fs/promises').then(({ mkdir }) => mkdir(path.join(root, 'knowledge'), { recursive: true }));
     await writeFile(path.join(root, 'test-manager.yaml'), config, 'utf8');
     await writeFile(path.join(root, 'knowledge/module.md'), `---\nid: MOD-1\nkind: module\ntitle: Module one\n---\n`, 'utf8');
@@ -121,8 +121,8 @@ describe('project catalog', () => {
     await writeFile(integrationFile, (await readFile(integrationFile, 'utf8')).replace(/CASE-(\d{3})/gu, (_, digits: string) => `CASE-${String(Number(digits) + 500).padStart(3, '0')}`), 'utf8');
     const config = path.join(root, 'test-manager.yaml');
     await writeFile(config, (await readFile(config, 'utf8')).replace(
-      '    - kind: vitest\n      layer: unit\n      paths: ["src/**/*.test.ts"]',
-      '    - kind: vitest\n      layer: unit\n      paths: ["src/**/!(*.integration).test.ts"]\n    - kind: vitest\n      layer: integration\n      paths: ["src/**/*.integration.test.ts"]',
+      '    unit:\n      vitest: ["src/**/*.test.ts"]',
+      '    unit:\n      vitest: ["src/**/!(*.integration).test.ts"]\n    integration:\n      vitest: ["src/**/*.integration.test.ts"]',
     ), 'utf8');
     const result = await checkProject(config);
     expect(result.ok).toBe(true);
@@ -215,6 +215,19 @@ describe('project catalog', () => {
     }
   });
 
+  it('lists layer descriptions on the top page only when a layer has one', async () => {
+    const plain = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    if (!plain.ok) throw new Error('fixture catalog must be valid');
+    expect((await renderSite(plain.catalog)).get('index.html')).not.toContain('layer-definitions');
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-layer-description-'));
+    await cp(fixture, root, { recursive: true });
+    const config = path.join(root, 'test-manager.yaml');
+    await writeFile(config, (await readFile(config, 'utf8')).replace('    unit:\n', '    unit:\n      description: Runs <without> a database\n'), 'utf8');
+    const described = await checkProject(config);
+    if (!described.ok) throw new Error('described catalog must be valid');
+    expect((await renderSite(described.catalog)).get('index.html')).toContain('<dl><dt>unit</dt><dd>Runs &lt;without&gt; a database</dd></dl>');
+  });
+
   it('renders the case layer as a search filter, in result rows, and on case pages', async () => {
     const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
     if (!result.ok) throw new Error('fixture catalog must be valid');
@@ -262,7 +275,7 @@ describe('project catalog', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-single-layer-'));
     const config = (await readFile(path.resolve('fixtures/alternate-rules.yaml'), 'utf8'))
       .replace('fixtures/none/**/*.md', 'knowledge/**/*.md')
-      .replace('sources: []', 'sources:\n    - { kind: manual, layer: manual, paths: ["knowledge/**/*.manual.yaml"] }');
+      .replace('sources: {}', 'sources:\n    manual:\n      manual: ["knowledge/**/*.manual.yaml"]');
     await mkdir(path.join(root, 'knowledge'), { recursive: true });
     await writeFile(path.join(root, 'test-manager.yaml'), config, 'utf8');
     await writeFile(path.join(root, 'knowledge/module.md'), `---\nid: MOD-1\nkind: module\ntitle: Module one\n---\n`, 'utf8');
@@ -344,15 +357,15 @@ describe('project catalog', () => {
     const overlapRoot = await mkdtemp(path.join(tmpdir(), 'test-manager-overlap-'));
     await cp(fixture, overlapRoot, { recursive: true });
     const overlapConfig = path.join(overlapRoot, 'test-manager.yaml');
-    await writeFile(overlapConfig, (await readFile(overlapConfig, 'utf8')).replace('paths: ["src/**/*.test.ts"]', 'paths: ["knowledge/**/*.manual.yaml", "src/**/*.test.ts"]'), 'utf8');
+    await writeFile(overlapConfig, (await readFile(overlapConfig, 'utf8')).replace('vitest: ["src/**/*.test.ts"]', 'vitest: ["knowledge/**/*.manual.yaml", "src/**/*.test.ts"]'), 'utf8');
     const overlap = await checkProject(overlapConfig);
     expect(overlap.ok).toBe(false);
-    if (!overlap.ok) expect(overlap.diagnostics.some((item) => item.code === 'TM010' && item.reason.includes('sources[0] (manual/e2e)') && item.reason.includes('sources[1] (vitest/unit)'))).toBe(true);
+    if (!overlap.ok) expect(overlap.diagnostics.some((item) => item.code === 'TM010' && item.reason.includes('sources.e2e.manual') && item.reason.includes('sources.unit.vitest'))).toBe(true);
 
     const sameGroupRoot = await mkdtemp(path.join(tmpdir(), 'test-manager-same-group-overlap-'));
     await cp(fixture, sameGroupRoot, { recursive: true });
     const sameGroupConfig = path.join(sameGroupRoot, 'test-manager.yaml');
-    await writeFile(sameGroupConfig, (await readFile(sameGroupConfig, 'utf8')).replace('paths: ["src/**/*.test.ts"]', 'paths: ["src/**/*.test.ts", "src/cancel.test.ts"]'), 'utf8');
+    await writeFile(sameGroupConfig, (await readFile(sameGroupConfig, 'utf8')).replace('vitest: ["src/**/*.test.ts"]', 'vitest: ["src/**/*.test.ts", "src/cancel.test.ts"]'), 'utf8');
     const sameGroup = await checkProject(sameGroupConfig);
     expect(sameGroup.ok).toBe(false);
     if (!sameGroup.ok) expect(sameGroup.diagnostics.some((item) => item.code === 'TM010' && item.reason.includes('src/cancel.test.ts'))).toBe(true);

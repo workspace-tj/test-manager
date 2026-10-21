@@ -137,19 +137,39 @@ describe('project-defined vocabulary', () => {
     const result = await loadRules(path.join(root, 'test-manager.yaml'));
     expect(result.rules).toBeUndefined();
     expect(result.diagnostics.some((item) => item.subject.endsWith('requiredWhen.equals') && item.reason.includes('e2e, unit, ui'))).toBe(true);
-    await writeFile(path.join(root, 'numeric.yaml'), source.replace('layer: unit', 'layer: "1"').replace('required: false, placement: classification, type: reference-list', 'required: false, placement: classification, requiredWhen: { field: layer, equals: 1 }, type: reference-list'), 'utf8');
+    await writeFile(path.join(root, 'numeric.yaml'), source.replace('required: false, placement: classification, type: reference-list', 'required: false, placement: classification, requiredWhen: { field: layer, equals: 1 }, type: reference-list'), 'utf8');
     const numeric = await loadRules(path.join(root, 'numeric.yaml'));
     expect(numeric.rules).toBeUndefined();
     expect(numeric.diagnostics.some((item) => item.subject.endsWith('requiredWhen.equals'))).toBe(true);
   });
 
-  it('requires a layer on every discovery source', async () => {
+  it('reads discovery sources grouped by layer, in the written order, with optional descriptions', async () => {
+    const loaded = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
+    expect(loaded.rules?.discovery.layers).toEqual([{ name: 'e2e' }, { name: 'unit' }, { name: 'ui' }]);
+    expect(loaded.rules?.discovery.sources).toEqual([
+      { kind: 'manual', layer: 'e2e', paths: ['knowledge/**/*.manual.yaml'] },
+      { kind: 'playwright', layer: 'e2e', paths: ['journeys/**/*.spec.ts'] },
+      { kind: 'vitest', layer: 'unit', paths: ['src/**/*.test.ts'] },
+      { kind: 'storybook', layer: 'ui', paths: ['src/**/*.stories.tsx'] },
+    ]);
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-rule-layer-'));
     const source = await readFile(path.resolve('fixtures/valid/test-manager.yaml'), 'utf8');
-    await writeFile(path.join(root, 'missing-layer.yaml'), source.replace('      layer: unit\n', ''), 'utf8');
-    const missing = await loadRules(path.join(root, 'missing-layer.yaml'));
-    expect(missing.rules).toBeUndefined();
-    expect(missing.diagnostics.some((item) => item.subject.endsWith('layer'))).toBe(true);
+    await writeFile(path.join(root, 'described.yaml'), source.replace('    unit:\n', '    unit:\n      description: Runs with the default Vitest config\n'), 'utf8');
+    expect((await loadRules(path.join(root, 'described.yaml'))).rules?.discovery.layers[1]).toEqual({ name: 'unit', description: 'Runs with the default Vitest config' });
+    for (const [name, replacement] of [
+      ['no-kind', '    unit:\n      description: only text\n'],
+      ['unknown-kind', '    unit:\n      jest: ["src/**/*.test.ts"]\n'],
+      ['empty-globs', '    unit:\n      vitest: []\n'],
+    ] as const) {
+      await writeFile(path.join(root, `${name}.yaml`), source.replace('    unit:\n      vitest: ["src/**/*.test.ts"]\n', replacement), 'utf8');
+      const rejected = await loadRules(path.join(root, `${name}.yaml`));
+      expect(rejected.rules, name).toBeUndefined();
+      expect(rejected.diagnostics.some((item) => item.subject.startsWith('discovery.sources.unit')), name).toBe(true);
+    }
+    await writeFile(path.join(root, 'integer.yaml'), source.replace('    unit:\n', '    "2":\n'), 'utf8');
+    const integer = await loadRules(path.join(root, 'integer.yaml'));
+    expect(integer.rules).toBeUndefined();
+    expect(integer.diagnostics.some((item) => item.reason.includes('must not be an integer'))).toBe(true);
   });
 
   it('rejects requiredWhen source values that are not case sources', async () => {

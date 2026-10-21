@@ -8,7 +8,7 @@
 2. GitHub Actions Variablesへ次の値を登録します。
    - `TEST_MANAGER_REF`: 使用するtest-managerの40文字commit SHA。helperを読み込むため、`examples/github-actions/`を含むcommit以降を指定します
    - `TEST_MANAGER_PRODUCTION_REF`: 比較元にするconsumerリポジトリのproduction commit SHA。このcommitにも`test-manager.yaml`が必要です
-3. workflowの`TM_ID_PATTERN`、environment、scope、targetをconsumerに合わせます。`TM_PLAYWRIGHT_LAYER`は、`discovery.sources`でPlaywrightに付けたlayerと同じ値にします。`TM_ID_PATTERN`は`test-manager.yaml`の`rules.idPattern`と同じ値にします。
+3. workflowの`TM_ID_PATTERN`、environment、scope、targetをconsumerに合わせます。`TM_PLAYWRIGHT_LAYER`は、`discovery.sources`でPlaywrightを書いたlayerと同じ値にします。`TM_ID_PATTERN`は`test-manager.yaml`の`rules.idPattern`と同じ値にします。
 4. 下記のreporter設定を既存のVitest・Playwright設定へ組み込みます。
 5. workflow内のVitestの2つの実行コマンドと`pnpm playwright test --project=chromium`を、consumerで普段使う実行コマンドへ必要に応じて置き換えます。Playwrightのproject名を変える場合は`TM_PLAYWRIGHT_TARGET`も同じ実行対象を表す値へ揃えます。
 
@@ -19,15 +19,12 @@
 ```yaml
 discovery:
   sources:
-    - kind: vitest
-      layer: unit
-      paths: ['src/**/!(*.integration).test.ts']
-    - kind: vitest
-      layer: integration
-      paths: ['src/**/*.integration.test.ts']
-    - kind: playwright
-      layer: e2e
-      paths: ['e2e/**/*.e2e.ts']
+    unit:
+      vitest: ['src/**/!(*.integration).test.ts']
+    integration:
+      vitest: ['src/**/*.integration.test.ts']
+    e2e:
+      playwright: ['e2e/**/*.e2e.ts']
 ```
 
 - `create-manifest.mjs`は、catalogのケースをrunnerとlayerの組ごとに1つのunitへまとめます。unit IDは`<runner>-<layer>-<target>`（例: `vitest-integration-node`）です

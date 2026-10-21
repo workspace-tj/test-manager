@@ -105,7 +105,7 @@ unit、integration、component、E2E、手動を別々の網羅性として評�
 - `source`: 記述方式。`manual`、`vitest`、`playwright`、`storybook` のいずれか
 - `layer`: そのケースが確かめるテスト層。`unit`、`integration`、`e2e` などプロジェクトが自由に名付ける
 
-どちらもケースごとに書かず、`discovery.sources` の各行 `{kind, layer, paths}` から、ファイルの置き場所と名前で決めます。手動ケースも `kind: manual` として同じ一覧に並べ、自動テストと同じlayerの軸で扱います。同じkindを複数行に分ければ、パスでlayerを分けられます。たとえばintegrationテストを慣習どおり `*.integration.test.ts` とする場合は、unit側のglobで除外して重複を避けます。一つのファイルが複数行に一致した場合は設定エラーです。
+どちらもケースごとに書かず、`discovery.sources` のlayerごとの記述方式とglobから、ファイルの置き場所と名前で決めます。手動ケースも `manual` として同じlayerの下に並べ、自動テストと同じlayerの軸で扱います。同じ記述方式を複数のlayerに書けば、パスでlayerを分けられます。たとえばintegrationテストを慣習どおり `*.integration.test.ts` とする場合は、unit側のglobで除外して重複を避けます。一つのファイルが複数のlayer・記述方式に一致した場合は設定エラーです。
 
 `requiredWhen` は他のcase項目に加えて `source` と `layer` を条件にできます。E2Eだけに必要な項目のような層固有の要件は、専用の種別を増やさずこの条件付き必須で表します。
 
@@ -261,7 +261,7 @@ source・layerを横断したケース一覧（layerで絞り込める）
 
 | 画面の情報 | 現在の取得元 | 状態 |
 | --- | --- | --- |
-| case ID、title、source、layer、定義状態 | `Catalog.cases` | 取得済み。source・layerは `discovery.sources` の行から決まる |
+| case ID、title、source、layer、定義状態 | `Catalog.cases` | 取得済み。source・layerは `discovery.sources` のlayerと記述方式から決まる |
 | 所属、refs、分類、理由、条件 | `fields` / `details` | 取得済み。所属は `belongsTo` |
 | domain・feature関係 | `Catalog.documents` の `kind` / `parent` | 取得済み。kind名はプロジェクト設定依存 |
 | domainの表示順 | `ProjectRules.documents.displayOrder` | 実装済み |

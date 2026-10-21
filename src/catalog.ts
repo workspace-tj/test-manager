@@ -39,7 +39,7 @@ export const checkProject = async (configPath: string): Promise<CheckResult> => 
   diagnostics.push(...documentDiscovery.diagnostics, ...sourceMatches.flatMap((match) => match.diagnostics));
 
   const ownership = new Map<string, string>();
-  for (const group of [{ name: 'documents', files: documentFiles }, ...sourceMatches.map(({ source, files }, index) => ({ name: `sources[${index}] (${source.kind}/${source.layer})`, files }))]) {
+  for (const group of [{ name: 'documents', files: documentFiles }, ...sourceMatches.map(({ source, files }) => ({ name: `sources.${source.layer}.${source.kind}`, files }))]) {
     for (const file of group.files) {
       const previous = ownership.get(file);
       if (previous) diagnostics.push(diagnostic('TM010', path.relative(projectRoot, file), 'discovery', `file matches both ${previous} and ${group.name}`));

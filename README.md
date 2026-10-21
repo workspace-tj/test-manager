@@ -133,18 +133,14 @@ idPattern: "^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$"
 discovery:
   documents: ["knowledge/**/*.md"]
   sources:
-    - kind: manual
-      layer: e2e
-      paths: ["knowledge/**/*.manual.yaml"]
-    - kind: vitest
-      layer: unit
-      paths: ["src/**/*.test.ts"]
-    - kind: playwright
-      layer: e2e
-      paths: ["journeys/**/*.spec.ts"]
-    - kind: storybook
-      layer: ui
-      paths: ["src/**/*.stories.tsx"]
+    e2e:
+      description: 起動したアプリケーションを画面から操作する。手動のケースもここに入れる
+      playwright: ["journeys/**/*.spec.ts"]
+      manual: ["knowledge/**/*.manual.yaml"]
+    unit:
+      vitest: ["src/**/*.test.ts"]
+    ui:
+      storybook: ["src/**/*.stories.tsx"]
 
 documents:
   kinds:
@@ -194,10 +190,11 @@ case:
 どのファイルを読み取るかを指定します。
 
 - `documents`: YAML frontmatter を持つ Markdown
-- `sources`: ケースを読み取るファイル。各行に `kind`、`layer`、`paths` を指定します
-  - `kind`: 記述方式。`manual`（1 ファイルに 1 ケースを記述した YAML）、`vitest`、`playwright`、`storybook`
-  - `layer`: そのファイル群が確かめるテスト層。`unit`、`integration`、`e2e` などプロジェクトで自由に名付けます。省略できません
-  - 同じ `kind` を複数行に分け、パスで層を分けられます。たとえば integration テストを `*.integration.test.ts` とする場合、unit 側は `src/**/!(*.integration).test.ts` のように除外して重複を避けます
+- `sources`: ケースを読み取るファイル。テスト層（layer）ごとに、記述方式をキーにして glob を並べます
+  - layer の名前: そのファイル群が確かめるテスト層。`unit`、`integration`、`e2e` などプロジェクトで自由に名付けます。書いた順に画面へ並べます。`1` のような整数だけの名前は、順序が保てないため使えません
+  - 記述方式: `manual`（1 ファイルに 1 ケースを記述した YAML）、`vitest`、`playwright`、`storybook`。1つの layer に1つ以上書きます
+  - `description`: 任意。その layer が何で決まるかを書きます。人によって解釈が分かれやすいため、「どの実行設定で動くか」のように事実で書くことを勧めます。カタログのトップ画面に表示します
+  - 同じ記述方式を複数の layer に書き、パスで層を分けられます。たとえば integration テストを `*.integration.test.ts` とする場合、unit 側は `src/**/!(*.integration).test.ts` のように除外して重複を避けます
 
 設定した glob が 1 件も見つからない場合や、一つのファイルが複数の設定に重複して一致した場合は診断します。
 

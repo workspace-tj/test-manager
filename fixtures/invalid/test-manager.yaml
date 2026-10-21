@@ -3,7 +3,7 @@ idPattern: "^[a-z-]+$"
 unexpected: rejected
 discovery:
   documents: ["**/*.md"]
-  sources: []
+  sources: {}
 documents:
   kinds: {}
 case:

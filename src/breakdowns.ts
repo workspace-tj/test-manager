@@ -22,7 +22,7 @@ const axisFor = (
   if (name === 'domain') {
     return { label: 'ドメイン', entries: documents.filter((document) => document.parent === undefined).map((document) => ({ key: document.id, label: document.title })), keyOf: (item) => domainOf(item)?.id };
   }
-  if (name === 'layer') return { label: 'テスト層', entries: [...new Set(rules.discovery.sources.map((source) => source.layer))].map((layer) => ({ key: layer, label: layer })), keyOf: (item) => item.layer };
+  if (name === 'layer') return { label: 'テスト層', entries: rules.discovery.layers.map((layer) => ({ key: layer.name, label: layer.name })), keyOf: (item) => item.layer };
   if (name === 'source') return { label: '記述方式', entries: caseSources.map((source) => ({ key: source, label: source })), keyOf: (item) => item.source };
   const rule = rules.case.fields[name];
   const label = rule?.label ?? name;

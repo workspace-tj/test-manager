@@ -2,7 +2,7 @@ version: 1
 idPattern: "^[A-Z]+-[0-9]+$"
 discovery:
   documents: ["fixtures/none/**/*.md"]
-  sources: []
+  sources: {}
 documents:
   kinds:
     module:

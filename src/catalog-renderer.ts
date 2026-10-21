@@ -60,7 +60,11 @@ export const renderCatalogSite = (catalog: Catalog, integrated = false): Readonl
   const linkDocument = (document: KnowledgeDocument): string => `<a href="../documents/${safeName(document.id)}.html">${escapeHtml(document.title)}</a>`;
   const linkCase = (item: ManagedCase): string => `<a href="../cases/${safeName(item.id)}.html">${escapeHtml(item.title)}</a>`;
   const domains = documents.filter((document) => document.parent === undefined);
-  const layers = [...new Set(catalog.rules.discovery.sources.map((source) => source.layer))];
+  const layers = catalog.rules.discovery.layers.map((layer) => layer.name);
+  const describedLayers = catalog.rules.discovery.layers.filter((layer) => layer.description !== undefined);
+  const layerSection = describedLayers.length > 0
+    ? `<section class="layer-definitions" aria-labelledby="layer-heading"><h2 id="layer-heading">テスト層</h2><dl>${describedLayers.map((layer) => `<dt>${escapeHtml(layer.name)}</dt><dd>${escapeHtml(layer.description ?? '')}</dd>`).join('')}</dl></section>`
+    : '';
   const caseCount = (document: KnowledgeDocument): string => {
     const below = casesBelow(document);
     if (below.length === 0) return '<small class="no-cases">ケースなし</small>';
@@ -79,7 +83,7 @@ export const renderCatalogSite = (catalog: Catalog, integrated = false): Readonl
     const search = [domain.title, summary, ...features.map((feature) => feature.title)].join(' ');
     return `<section class="domain-overview" data-domain-overview="${escapeHtml(domain.id)}" data-search="${escapeHtml(search)}"><header><h2><a href="documents/${safeName(domain.id)}.html">${escapeHtml(domain.title)}</a></h2><span>${casesBelow(domain).length}ケース</span></header><p>${escapeHtml(summary)}</p>${features.length ? `<ul>${features.map((feature) => `<li><a href="documents/${safeName(feature.id)}.html">${escapeHtml(feature.title)}</a>${caseCount(feature)}</li>`).join('')}</ul>` : ''}</section>`;
   }).join('');
-  files.set('index.html', layout('ドメイン', 'catalog', '', `<div class="catalog-intro"><h1>ドメインから確認内容をたどる</h1><label class="global-search"><span>検索</span><input id="search" type="search" placeholder="ドメイン、featureを検索"></label><strong><span>${documents.length}</span>文書</strong></div><div class="domain-overviews">${domainCards}</div>${renderBreakdowns(catalog.rules, cases, documents, domainOf, pathOf)}${uncoveredSection}<script src="assets/search.js"></script>`));
+  files.set('index.html', layout('ドメイン', 'catalog', '', `<div class="catalog-intro"><h1>ドメインから確認内容をたどる</h1><label class="global-search"><span>検索</span><input id="search" type="search" placeholder="ドメイン、featureを検索"></label><strong><span>${documents.length}</span>文書</strong></div><div class="domain-overviews">${domainCards}</div>${renderBreakdowns(catalog.rules, cases, documents, domainOf, pathOf)}${uncoveredSection}${layerSection}<script src="assets/search.js"></script>`));
 
   const values = (select: (item: ManagedCase) => unknown): string[] => [...new Set(cases.map(select).filter((value): value is string | number => typeof value === 'string' || typeof value === 'number').map(String))].sort(compareText);
   const filterFields = Object.entries(catalog.rules.case.fields).filter(([name, rule]) => name !== 'belongsTo' && rule.placement === 'classification' && rule.type !== 'reference-list').map(([name]) => name).sort(compareText);

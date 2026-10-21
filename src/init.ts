@@ -7,12 +7,16 @@ version: 1
 idPattern: "^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3,})$"
 discovery:
   documents: ["knowledge/**/*.md"]
-  # One row per test kind and layer. A file must match exactly one row.
-  # - { kind: vitest, layer: unit, paths: ["src/**/!(*.integration).test.ts"] }
-  # - { kind: vitest, layer: integration, paths: ["src/**/*.integration.test.ts"] }
-  # - { kind: playwright, layer: e2e, paths: ["e2e/**/*.spec.ts"] }
-  # - { kind: manual, layer: e2e, paths: ["knowledge/**/*.manual.yaml"] }
-  sources: []
+  # Group files by layer, then by test kind (manual, vitest, playwright, storybook). A file must match exactly one entry.
+  # unit:
+  #   description: Runs with the default Vitest config, without a database
+  #   vitest: ["src/**/!(*.integration).test.ts"]
+  # integration:
+  #   vitest: ["src/**/*.integration.test.ts"]
+  # e2e:
+  #   playwright: ["e2e/**/*.spec.ts"]
+  #   manual: ["knowledge/**/*.manual.yaml"]
+  sources: {}
 documents:
   kinds:
     domain:

@@ -54,6 +54,7 @@ export type ProjectRules = Readonly<{
   idPattern: string;
   discovery: Readonly<{
     documents: ReadonlyArray<string>;
+    layers: ReadonlyArray<Readonly<{ name: string; description?: string }>>;
     sources: ReadonlyArray<Readonly<{ kind: CaseSource; layer: string; paths: ReadonlyArray<string> }>>;
   }>;
   documents: Readonly<{
