@@ -4,12 +4,14 @@ import type { DailyView } from './daily-view.js';
 import type { Catalog } from './model.js';
 import { renderReleaseSite } from './release-site.js';
 import type { ReleaseDiffView } from './release-diff.js';
+import type { RunHistoryView } from './run-history.js';
 
 export const renderQualitySite = (
   catalog: Catalog,
   daily: DailyView,
   release: ReleaseDiffView,
   stylesheet: string,
+  history?: RunHistoryView,
 ): ReadonlyMap<string, string> => {
   const files = new Map<string, string>();
   const add = (prefix: string, generated: ReadonlyMap<string, string>): void => {
@@ -24,7 +26,7 @@ export const renderQualitySite = (
   const releaseFiles = new Map(renderReleaseSite(release, stylesheet, true));
   releaseFiles.delete('assets/dashboard.css');
   add('', releaseFiles);
-  add('', renderDailySite(daily, stylesheet, true));
+  add('', renderDailySite(daily, stylesheet, true, history));
   const catalogFiles = new Map(renderCatalogSite(catalog, true));
   catalogFiles.delete('.test-manager-output');
   add('catalog/', catalogFiles);
