@@ -228,6 +228,16 @@ describe('project catalog', () => {
     expect((await renderSite(described.catalog)).get('index.html')).toContain('<dl><dt>unit</dt><dd>Runs &lt;without&gt; a database</dd></dl>');
   });
 
+  it('shows case fields by their labels and manual steps as a numbered table', async () => {
+    const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    if (!result.ok) throw new Error('fixture catalog must be valid');
+    const page = (await renderSite(result.catalog)).get('cases/CASE-101.html') ?? '';
+    expect(page).toContain('<dt>確認担当</dt><dd>プロダクト <small>product</small></dd>');
+    expect(page).toMatch(/<dt>belongsTo<\/dt><dd><a href="\.\.\/documents\/[^"]+\.html">[^<]+<\/a><\/dd>/u);
+    expect(page).toContain('<table class="case-procedure"><thead><tr><th scope="col">#</th><th scope="col">操作</th><th scope="col">期待結果</th></tr></thead><tbody><tr><td>1</td>');
+    expect(page).not.toContain('&quot;belongsTo&quot;');
+  });
+
   it('renders the case layer as a search filter, in result rows, and on case pages', async () => {
     const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
     if (!result.ok) throw new Error('fixture catalog must be valid');
