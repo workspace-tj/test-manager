@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { parse } from '@babel/parser';
+import { parse, type ParserPlugin } from '@babel/parser';
 import traverseModule from '@babel/traverse';
 import * as t from '@babel/types';
 import type { NodePath } from '@babel/traverse';
@@ -89,7 +89,9 @@ const firstBodyComment = (call: t.CallExpression): Comment | undefined => {
 
 const parseSource = (source: string, file: string): Readonly<{ ast?: t.File; diagnostics: ReadonlyArray<Diagnostic> }> => {
   try {
-    return { ast: parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'], errorRecovery: false }), diagnostics: [] };
+    // TypeScript files cannot contain JSX, and there `<T>(x) => x` is a generic arrow function rather than an element.
+    const plugins: ParserPlugin[] = /\.[cm]?ts$/u.test(file) ? ['typescript'] : ['typescript', 'jsx'];
+    return { ast: parse(source, { sourceType: 'module', plugins, errorRecovery: false }), diagnostics: [] };
   } catch (error) {
     const at = isRecord(error) && isRecord(error.loc) ? error.loc : undefined;
     return { diagnostics: [diagnostic('TM200', file, 'source', String(error), typeof at?.line === 'number' ? at.line : 1, typeof at?.column === 'number' ? at.column + 1 : 1)] };

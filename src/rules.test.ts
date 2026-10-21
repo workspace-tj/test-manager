@@ -102,6 +102,18 @@ describe('project-defined vocabulary', () => {
     expect(validateCaseFields({ belongsTo: 'area' }, rules, documents, 'case.ts', { source: 'vitest', layer: 'unit' })).toEqual([]);
   });
 
+  it('lets requiredWhen fields omit required, but still asks every other field to state it', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-rule-required-omitted-'));
+    const source = await readFile(path.resolve('fixtures/valid/test-manager.yaml'), 'utf8');
+    const target = 'required: false, placement: classification, type: reference-list';
+    await writeFile(path.join(root, 'conditional.yaml'), source.replace(target, 'placement: classification, requiredWhen: { field: layer, equals: e2e }, type: reference-list'), 'utf8');
+    const conditional = await loadRules(path.join(root, 'conditional.yaml'));
+    expect(conditional.diagnostics).toEqual([]);
+    expect(conditional.rules?.case.fields.refs).toMatchObject({ required: false, requiredWhen: { field: 'layer', in: ['e2e'] } });
+    await writeFile(path.join(root, 'omitted.yaml'), source.replace(target, 'placement: classification, type: reference-list'), 'utf8');
+    expect((await loadRules(path.join(root, 'omitted.yaml'))).diagnostics.map((item) => item.subject)).toContain('case.fields.refs.required');
+  });
+
   it('accepts requiredWhen.in from configuration and reports each value that cannot match', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-rule-condition-in-'));
     const source = await readFile(path.resolve('fixtures/valid/test-manager.yaml'), 'utf8');
