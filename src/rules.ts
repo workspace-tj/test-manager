@@ -94,7 +94,7 @@ const RulesShape = z.object({
 }).strict();
 
 const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z.RefinementCtx): void => {
-  const reservedFields = new Set(['id', 'title', 'steps', 'source', 'status', 'details', 'procedure', 'parameters', 'location', 'snippet', 'owner', 'layer']);
+  const reservedFields = new Set(['id', 'title', 'steps', 'source', 'status', 'details', 'procedure', 'parameters', 'parametersSource', 'location', 'snippet', 'owner', 'layer']);
   for (const name of Object.keys(rules.case.fields)) if (reservedFields.has(name)) context.addIssue({ code: 'custom', path: ['case', 'fields', name], message: `${name} is reserved by the case model` });
   const belongsTo = rules.case.fields.belongsTo;
   if (!belongsTo || !belongsTo.required || belongsTo.type !== 'reference') {

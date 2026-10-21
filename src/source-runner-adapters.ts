@@ -71,13 +71,21 @@ const importedFrom = (isRunnerModule: RunnerModuleMatcher) => (callPath: NodePat
   return (importedName === 'test' || importedName === 'it') && parent?.isImportDeclaration() === true && isRunnerModule(parent.node.source.value);
 };
 
-// The each table written inline, or held by a `const` in the same file whose initializer is an array literal.
-const eachTable = (callPath: NodePath<t.CallExpression>, argument: t.Node | undefined): t.Node | null | undefined => {
+const isEachTableArgument = (reference: NodePath): boolean => {
+  const parent = reference.parentPath;
+  return parent?.isCallExpression() === true && parent.node.arguments[0] === reference.node && t.isMemberExpression(parent.node.callee) && memberName(parent.node.callee)?.endsWith('.each') === true;
+};
+
+// The each table written inline, or held by a plain `const` in the same file that is used only as each tables, so no
+// later `.push` or element assignment can change it. `source` is the node whose text stands in when values cannot be read.
+const eachTable = (callPath: NodePath<t.CallExpression>, argument: t.Node | undefined): Readonly<{ table: t.Node | null | undefined; source: t.Node | null | undefined }> => {
   const table = unwrapTypeAssertions(argument);
-  if (!t.isIdentifier(table)) return table;
+  if (!t.isIdentifier(table)) return { table, source: argument };
   const binding = callPath.scope.getBinding(table.name);
-  if (binding?.kind !== 'const' || !binding.path.isVariableDeclarator()) return table;
-  return unwrapTypeAssertions(binding.path.node.init);
+  if (binding?.kind !== 'const' || !binding.path.isVariableDeclarator() || !t.isIdentifier(binding.path.node.id) || !binding.referencePaths.every(isEachTableArgument)) {
+    return { table, source: argument };
+  }
+  return { table: unwrapTypeAssertions(binding.path.node.init), source: binding.path.node.init };
 };
 
 const declarationFor = (modifiers: ReadonlySet<string>, todoWithoutCallback: boolean) =>
@@ -101,13 +109,12 @@ const declarationFor = (modifiers: ReadonlySet<string>, todoWithoutCallback: boo
     if (!t.isCallExpression(call.callee)) return {};
     const name = memberName(call.callee.callee);
     if (!name || !allowed(name, true) || !importedFrom(isRunnerModule)(callPath, name)) return {};
-    const argument = call.callee.arguments[0];
-    const table = eachTable(callPath, argument);
-    if (!t.isArrayExpression(table)) return { name, dynamicEach: true, ...rangeOf(argument) };
+    const { table, source } = eachTable(callPath, call.callee.arguments[0]);
+    if (!t.isArrayExpression(table)) return { name, dynamicEach: true, ...rangeOf(source) };
     const parameters: unknown[] = [];
     for (const entry of table.elements) {
       const parsed = staticValue(entry);
-      if (!parsed.ok) return { name, dynamicEach: true, ...rangeOf(argument) };
+      if (!parsed.ok) return { name, dynamicEach: true, ...rangeOf(source) };
       parameters.push(parsed.value);
     }
     return { name, parameters };

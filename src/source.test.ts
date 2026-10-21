@@ -162,6 +162,14 @@ describe('unsupported source syntax', () => {
     const constTable = await read('const-table', `const codes = ['A', 'B'] as const;\n${marker}\ntest.each(codes)('code %s', { meta: { caseId: 'CASE-963' } }, () => {});`);
     expect(constTable.diagnostics).toEqual([]);
     expect(constTable.cases.map((item) => item.source === 'vitest' ? item.parameters : undefined)).toEqual([['A', 'B']]);
+    const destructured = await read('destructured', `const [rows] = [[1, 2]];\n${marker}\ntest.each(rows)('row %s', { meta: { caseId: 'CASE-967' } }, () => {});`);
+    expect(destructured.cases.map((item) => item.source === 'vitest' ? [item.parameters, item.parametersSource] : undefined)).toEqual([[undefined, 'rows']]);
+    const mutated = await read('mutated', `const rows = [1];\nrows.push(2);\n${marker}\ntest.each(rows)('row %s', { meta: { caseId: 'CASE-968' } }, () => {});`);
+    expect(mutated.cases.map((item) => item.source === 'vitest' ? [item.parameters, item.parametersSource] : undefined)).toEqual([[undefined, 'rows']]);
+    const sharedByTwo = await read('shared', `const rows = ['a'];\n${marker}\ntest.each(rows)('one %s', { meta: { caseId: 'CASE-969' } }, () => {});\n${marker}\ntest.each(rows)('two %s', { meta: { caseId: 'CASE-970' } }, () => {});`);
+    expect(sharedByTwo.cases.map((item) => item.source === 'vitest' ? item.parameters : undefined)).toEqual([['a'], ['a']]);
+    const followedSource = await read('followed', `const account = () => ({});\nconst rows = [\r\n  [account()],\r\n];\n${marker}\ntest.each(rows)('row %s', { meta: { caseId: 'CASE-971' } }, () => {});`);
+    expect(followedSource.cases.map((item) => item.source === 'vitest' ? item.parametersSource : undefined)).toEqual(['[\n  [account()],\n]']);
     const letTable = await read('let-table', `let codes = ['A'];\n${marker}\ntest.each(codes)('code %s', { meta: { caseId: 'CASE-964' } }, () => {});`);
     expect(letTable.diagnostics).toEqual([]);
     expect(letTable.cases.map((item) => item.source === 'vitest' ? [item.parameters, item.parametersSource] : undefined)).toEqual([[undefined, 'codes']]);

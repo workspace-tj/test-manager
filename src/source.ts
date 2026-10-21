@@ -147,7 +147,7 @@ export const readTestSource = async (
           return;
         }
         // A table that cannot be read as values is kept as its source text, so the case still lists what it varies.
-        const parametersSource = shape.dynamicEach && shape.tableRange ? source.slice(shape.tableRange.start, shape.tableRange.end) : undefined;
+        const parametersSource = shape.dynamicEach && shape.tableRange ? source.slice(shape.tableRange.start, shape.tableRange.end).replace(/\r\n?/gu, '\n') : undefined;
         if (shape.dynamicEach && parametersSource === undefined) diagnostics.push(diagnostic('TM203', relative, title, 'each table could not be located', line));
         const commentNode = t.isExpressionStatement(callPath.parent) ? callPath.parent : call;
         const before = markerYaml(immediateComment(commentNode), '@case', relative, classificationKeys, 'TM207');
