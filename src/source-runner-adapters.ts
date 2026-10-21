@@ -13,8 +13,12 @@ type RunnerKind = Exclude<SourceKind, 'storybook'>;
 type CaseStatus = ManagedCase['status'];
 type Declaration = Readonly<{ name?: string; parameters?: ReadonlyArray<unknown>; dynamicEach?: boolean }>;
 
+// Whether an import specifier names a module that provides the runner's `test` / `it`.
+export type RunnerModuleMatcher = (specifier: string) => boolean;
+
 type RunnerSourceAdapter<Status extends CaseStatus = CaseStatus> = Readonly<{
-  declaration: (callPath: NodePath<t.CallExpression>) => Declaration;
+  defaultModule: string;
+  declaration: (callPath: NodePath<t.CallExpression>, isRunnerModule: RunnerModuleMatcher) => Declaration;
   extractCaseId: (call: t.CallExpression) => ExtractedCaseId;
   idRequirement: string;
   status: (declaration: string) => Status;
@@ -52,7 +56,7 @@ const extractPlaywrightCaseId = (call: t.CallExpression): ExtractedCaseId => {
   return { ...(id !== undefined ? { id } : {}), invalidMultiplicity: annotationProperties.length > 1 || occurrences > 1, ...(unsupportedShape ? { unsupportedShape: true } : {}) };
 };
 
-const importedFrom = (moduleName: string) => (callPath: NodePath<t.CallExpression>, declaration: string): boolean => {
+const importedFrom = (isRunnerModule: RunnerModuleMatcher) => (callPath: NodePath<t.CallExpression>, declaration: string): boolean => {
   const root = declaration.split('.')[0];
   if (!root) return false;
   const binding = callPath.scope.getBinding(root);
@@ -60,11 +64,11 @@ const importedFrom = (moduleName: string) => (callPath: NodePath<t.CallExpressio
   const imported = binding.path.node.imported;
   const importedName = t.isIdentifier(imported) ? imported.name : imported.value;
   const parent = binding.path.parentPath;
-  return (importedName === 'test' || importedName === 'it') && parent?.isImportDeclaration() === true && parent.node.source.value === moduleName;
+  return (importedName === 'test' || importedName === 'it') && parent?.isImportDeclaration() === true && isRunnerModule(parent.node.source.value);
 };
 
-const declarationFor = (moduleName: string, modifiers: ReadonlySet<string>, todoWithoutCallback: boolean) =>
-  (callPath: NodePath<t.CallExpression>): Declaration => {
+const declarationFor = (modifiers: ReadonlySet<string>, todoWithoutCallback: boolean) =>
+  (callPath: NodePath<t.CallExpression>, isRunnerModule: RunnerModuleMatcher): Declaration => {
     const allowed = (name: string, each: boolean): boolean => {
       const [root, ...parts] = name.split('.');
       const expectedModifiers = each ? parts.slice(0, -1) : parts;
@@ -72,18 +76,18 @@ const declarationFor = (moduleName: string, modifiers: ReadonlySet<string>, todo
     };
     const call = callPath.node;
     const direct = memberName(call.callee);
-    if (direct && !direct.endsWith('.each') && allowed(direct, false) && importedFrom(moduleName)(callPath, direct)) {
+    if (direct && !direct.endsWith('.each') && allowed(direct, false) && importedFrom(isRunnerModule)(callPath, direct)) {
       const hasCallback = call.arguments.some((argument) => t.isArrowFunctionExpression(argument) || t.isFunctionExpression(argument));
       if (!hasCallback && !(todoWithoutCallback && direct.split('.').includes('todo'))) return {};
       return { name: direct };
     }
     if (t.isTaggedTemplateExpression(call.callee)) {
       const name = memberName(call.callee.tag);
-      return name && allowed(name, true) && importedFrom(moduleName)(callPath, name) ? { name, dynamicEach: true } : {};
+      return name && allowed(name, true) && importedFrom(isRunnerModule)(callPath, name) ? { name, dynamicEach: true } : {};
     }
     if (!t.isCallExpression(call.callee)) return {};
     const name = memberName(call.callee.callee);
-    if (!name || !allowed(name, true) || !importedFrom(moduleName)(callPath, name)) return {};
+    if (!name || !allowed(name, true) || !importedFrom(isRunnerModule)(callPath, name)) return {};
     const table = call.callee.arguments[0];
     if (!t.isArrayExpression(table)) return { name, dynamicEach: true };
     const parameters: unknown[] = [];
@@ -100,13 +104,15 @@ const adapters: Readonly<{
   playwright: RunnerSourceAdapter<'active' | 'skip'>;
 }> = {
   vitest: {
-    declaration: declarationFor('vitest', new Set(['skip', 'todo', 'only', 'concurrent', 'fails']), true),
+    defaultModule: 'vitest',
+    declaration: declarationFor(new Set(['skip', 'todo', 'only', 'concurrent', 'fails']), true),
     extractCaseId: extractVitestCaseId,
     idRequirement: 'meta.caseId is required in the declaration options',
     status: (declaration) => declaration.includes('.todo') ? 'todo' : declaration.includes('.skip') ? 'skip' : 'active',
   },
   playwright: {
-    declaration: declarationFor('@playwright/test', new Set(['skip', 'fixme', 'only', 'fail']), false),
+    defaultModule: '@playwright/test',
+    declaration: declarationFor(new Set(['skip', 'fixme', 'only', 'fail']), false),
     extractCaseId: extractPlaywrightCaseId,
     idRequirement: 'annotation { type: case-id, description: ID } is required in declaration options',
     status: (declaration) => declaration.includes('.skip') || declaration.includes('.fixme') ? 'skip' : 'active',

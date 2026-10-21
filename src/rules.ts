@@ -85,6 +85,9 @@ const RulesShape = z.object({
     displayOrder: DisplayOrderSchema.optional().default({}),
   }).strict(),
   case: z.object({ fields: z.record(z.string(), FieldRuleSchema) }).strict(),
+  runners: z.object(Object.fromEntries((['vitest', 'playwright'] as const).map((kind) => [kind, z.object({
+    testModules: z.array(z.string().min(1)).min(1),
+  }).strict().optional()])) as Record<'vitest' | 'playwright', z.ZodOptional<z.ZodObject<{ testModules: z.ZodArray<z.ZodString> }, z.core.$strict>>>).strict().optional(),
   reports: z.object({
     breakdowns: z.array(z.object({ rows: z.string().min(1), columns: z.string().min(1) }).strict()).min(1),
   }).strict().optional(),
