@@ -260,7 +260,7 @@ describe('project catalog', () => {
     expect([...pathPage.matchAll(/<h([34])>([^<]+) <small>/gu)].map((match) => `${match[1]}:${match[2]}`)).toEqual(['3:L-normal', '3:未設定']);
     const flat = (await renderSite(catalog)).get(`documents/${document}.html`) ?? '';
     expect(flat).not.toMatch(/<h[34]>/u);
-    expect(flat).toMatch(/<li><a href="\.\.\/cases\/[^"]+\.html">[^<]+<\/a> <small>[^<]+ · [^<]+<\/small><\/li>/u);
+    expect(flat).toMatch(/<li><a href="\.\.\/cases\/[^"]+\.html">[^<]+<\/a><small>[^<]+ · [^<]+<\/small><\/li>/u);
   });
 
   it('escapes field values and marks references to missing documents on case pages', async () => {
@@ -272,7 +272,7 @@ describe('project catalog', () => {
     const page = (await renderSite(altered)).get(`cases/${first.id}.html`) ?? '';
     expect(page).toMatch(/<a href="\.\.\/documents\/orders\.html">[^<]+<\/a>、<code>gone<\/code> <small>（文書なし）<\/small>/u);
     expect(page).toContain('<dt>note</dt><dd>&lt;b&gt;&amp;x&lt;/b&gt;</dd>');
-    expect(page).toContain('<h2>条件・理由</h2><p>なし</p>');
+    expect(page).toContain('<h2>条件・理由</h2><p class="empty-note">なし</p>');
   });
 
   it('renders the case layer as a search filter, in result rows, and on case pages', async () => {
@@ -285,7 +285,7 @@ describe('project catalog', () => {
     if (!unitCase) throw new Error('fixture must contain a unit case');
     expect(index).toContain(`${unitCase.id} · unit · ${unitCase.source}`);
     expect(index).toContain('&quot;layer&quot;:&quot;unit&quot;');
-    expect(site.get(`cases/${unitCase.id}.html`)).toContain(`<code>${unitCase.id}</code> · unit · ${unitCase.source}`);
+    expect(site.get(`cases/${unitCase.id}.html`)).toContain(`<code>${unitCase.id}</code><span>unit</span><span>${unitCase.source}</span>`);
   });
 
   it('lists membership documents without cases and breaks counts down by layer', async () => {
