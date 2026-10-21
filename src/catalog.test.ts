@@ -234,8 +234,20 @@ describe('project catalog', () => {
     const page = (await renderSite(result.catalog)).get('cases/CASE-101.html') ?? '';
     expect(page).toContain('<dt>確認担当</dt><dd>プロダクト <small>product</small></dd>');
     expect(page).toMatch(/<dt>belongsTo<\/dt><dd><a href="\.\.\/documents\/[^"]+\.html">[^<]+<\/a><\/dd>/u);
-    expect(page).toContain('<table class="case-procedure"><thead><tr><th scope="col">#</th><th scope="col">操作</th><th scope="col">期待結果</th></tr></thead><tbody><tr><td>1</td>');
+    expect(page).toContain('<table class="case-procedure"><thead><tr><th scope="col">#</th><th scope="col">操作</th><th scope="col">期待結果</th></tr></thead><tbody><tr><th scope="row">1</th>');
     expect(page).not.toContain('&quot;belongsTo&quot;');
+  });
+
+  it('escapes field values and marks references to missing documents on case pages', async () => {
+    const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    if (!result.ok) throw new Error('fixture catalog must be valid');
+    const [first] = result.catalog.cases;
+    if (!first) throw new Error('fixture must contain a case');
+    const altered = { ...result.catalog, cases: [{ ...first, fields: { ...first.fields, refs: ['orders', 'gone'], note: '<b>&x</b>' }, details: {} } as unknown as typeof first] };
+    const page = (await renderSite(altered)).get(`cases/${first.id}.html`) ?? '';
+    expect(page).toMatch(/<a href="\.\.\/documents\/orders\.html">[^<]+<\/a>、<code>gone<\/code> <small>（文書なし）<\/small>/u);
+    expect(page).toContain('<dt>note</dt><dd>&lt;b&gt;&amp;x&lt;/b&gt;</dd>');
+    expect(page).toContain('<h2>条件・理由</h2><p>なし</p>');
   });
 
   it('renders the case layer as a search filter, in result rows, and on case pages', async () => {
