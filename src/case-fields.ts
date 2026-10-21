@@ -95,6 +95,16 @@ export const parseCaseFields = (
       else if ((rule.type === 'reference' || rule.type === 'reference-list') && !rule.targetKinds.includes(target.kind)) diagnostics.push(at('TM127', name, `reference ${reference} has disallowed kind ${target.kind}`));
     }
   }
+  // refs names other related documents; the case's own document and its ancestors are already stated by belongsTo.
+  const refsRule = rules.refs;
+  if (refsRule?.type === 'reference-list' && fields.refs) {
+    const implied = new Set<string>();
+    for (let current = knownDocuments.get(fields.belongsTo); current && !implied.has(current.id); current = current.parent ? knownDocuments.get(current.parent) : undefined) implied.add(current.id);
+    for (const reference of new Set(fields.refs)) {
+      const target = knownDocuments.get(reference);
+      if (target && refsRule.targetKinds.includes(target.kind) && implied.has(reference)) diagnostics.push(at('TM128', 'refs', `reference ${reference} is already implied by belongsTo ${fields.belongsTo}`));
+    }
+  }
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, fields };
 };
 

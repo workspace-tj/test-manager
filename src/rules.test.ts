@@ -64,6 +64,31 @@ describe('project-defined vocabulary', () => {
     expect(validateCaseFields({ belongsTo: 'area' }, rules, documents, 'case.ts', { source: 'vitest', layer: 'unit' })).toEqual([]);
   });
 
+  it('rejects refs that repeat belongsTo or any of its ancestors', () => {
+    const document = (id: string, kind: string, parent?: string) => ({ id: documentIdSchema(/.*/u).parse(id), kind, title: id, body: '', location: { file: `${id}.md`, line: 1, column: 1 }, ...(parent ? { parent: documentIdSchema(/.*/u).parse(parent) } : {}) });
+    const documents = [
+      document('billing', 'domain'), document('invoice', 'feature', 'billing'), document('invoice-issue', 'feature', 'invoice'),
+      document('salary', 'domain'), document('salary-calc', 'feature', 'salary'),
+      document('loop-a', 'feature', 'loop-b'), document('loop-b', 'feature', 'loop-a'),
+    ];
+    const rules = {
+      belongsTo: { required: true as const, placement: 'classification' as const, type: 'reference' as const, targetKinds: ['feature'] },
+      refs: { required: false as const, placement: 'classification' as const, type: 'reference-list' as const, targetKinds: ['domain', 'feature'] },
+      dependsOn: { required: false as const, placement: 'classification' as const, type: 'reference-list' as const, targetKinds: ['domain', 'feature'] },
+    };
+    const reasons = (fields: unknown) => validateCaseFields(fields, rules, documents, 'case.ts').map((item) => `${item.code} ${item.reason}`);
+    expect(reasons({ belongsTo: 'invoice-issue', refs: ['invoice-issue', 'billing', 'salary-calc', 'billing'] })).toEqual([
+      'TM128 reference invoice-issue is already implied by belongsTo invoice-issue',
+      'TM128 reference billing is already implied by belongsTo invoice-issue',
+    ]);
+    expect(reasons({ belongsTo: 'invoice-issue', refs: ['salary-calc', 'salary'] })).toEqual([]);
+    expect(reasons({ belongsTo: 'invoice-issue', dependsOn: ['billing'] })).toEqual([]);
+    expect(reasons({ belongsTo: 'loop-a', refs: ['loop-b'] })).toEqual(['TM128 reference loop-b is already implied by belongsTo loop-a']);
+    expect(reasons({ belongsTo: 'missing', refs: ['billing'] })).toEqual(['TM126 reference missing does not exist']);
+    const featureOnly = { ...rules, refs: { ...rules.refs, targetKinds: ['feature'] } };
+    expect(validateCaseFields({ belongsTo: 'invoice-issue', refs: ['billing'] }, featureOnly, documents, 'case.ts').map((item) => item.code)).toEqual(['TM127']);
+  });
+
   it('requires a field when the condition matches any value listed in requiredWhen.in', () => {
     const rules = {
       belongsTo: { required: true as const, placement: 'classification' as const, type: 'reference' as const, targetKinds: ['area'] },
