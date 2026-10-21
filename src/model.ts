@@ -62,6 +62,7 @@ export type ProjectRules = Readonly<{
     displayOrder: Readonly<Record<string, ReadonlyArray<string>>>;
   }>;
   case: Readonly<{ fields: Readonly<Record<string, FieldRule>> }>;
+  runners?: Readonly<{ [Kind in 'vitest' | 'playwright']?: Readonly<{ testModules: ReadonlyArray<string> }> | undefined }> | undefined;
   reports?: Readonly<{ breakdowns: ReadonlyArray<Readonly<{ rows: string; columns: string }>> }> | undefined;
 }>;
 

@@ -346,6 +346,18 @@ test.describe('請求書', { tag: '@regression' }, () => {
 - テスト名の中に書いたタグ（`'請求書を発行できる @smoke'`）は読みません
 - Vitest と手動ケースでは、これまでどおり `@case` に書きます
 
+プロジェクトが `test.extend` などで作った `test` を自前の fixtures から import している場合は、その import 元を `runners.playwright.testModules`（Vitest は `runners.vitest.testModules`）に書きます。`@playwright/test` と `vitest` は常に対象です。
+
+```yaml
+runners:
+  playwright:
+    testModules:
+      - "@company/e2e/fixtures"          # パッケージ名はそのまま一致させる
+      - "apps/**/__e2e__/fixtures"       # 相対 import は、プロジェクトからのパス（拡張子なし）に直して glob で照合する
+```
+
+相対 import は、拡張子・末尾の `/index`・`?` 以降を除いて照合します。tsconfig の paths などの別名は、import に書いた文字列のまま完全一致で書きます。
+
 ### Storybook
 
 Story の明示的な `name` の先頭へケース ID を入れます。

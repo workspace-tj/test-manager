@@ -10,7 +10,7 @@ import { parseCaseFields, partitionCaseFields } from './case-fields.js';
 import type { Diagnostic, KnowledgeDocument, Location, ManagedCase, ProjectRules, SourceKind } from './model.js';
 import { diagnostic, location } from './diagnostics.js';
 import { ambiguousObject, objectProperty, stringValue } from './source-ast.js';
-import { runnerSourceAdapter } from './source-runner-adapters.js';
+import { runnerSourceAdapter, type RunnerModuleMatcher } from './source-runner-adapters.js';
 import { collectPlaywrightTags, fieldsFromTags, tagFieldNames } from './playwright-tags.js';
 import { storybookDeclarations } from './source-storybook-adapter.js';
 import { isRecord, parseStrictYaml } from './yaml.js';
@@ -98,6 +98,17 @@ const parseSource = (source: string, file: string): Readonly<{ ast?: t.File; dia
   }
 };
 
+// The runner's own module always counts. Configured entries match a bare specifier exactly, or a relative import
+// resolved to a project-relative path without extension, e.g. `apps/**/__e2e__/fixtures` for `import { test } from './fixtures'`.
+const runnerModuleMatcher = (defaultModule: string, configured: ReadonlyArray<string>, file: string): RunnerModuleMatcher => (specifier) => {
+  if (specifier === defaultModule || configured.includes(specifier)) return true;
+  if (!specifier.startsWith('.')) return false;
+  const resolved = path.posix.join(path.posix.dirname(file.split(path.sep).join('/')), specifier.replace(/[?#].*$/u, ''))
+    .replace(/\.[cm]?[jt]sx?$/u, '')
+    .replace(/\/index$/u, '');
+  return configured.some((pattern) => path.matchesGlob(resolved, pattern));
+};
+
 const markerFieldLocations = (marker: Readonly<{ fieldLocations?: Readonly<Record<string, Location>> }>): Readonly<Record<string, Location>> => marker.fieldLocations ?? {};
 
 export const readTestSource = async (
@@ -116,12 +127,13 @@ export const readTestSource = async (
   const diagnostics: Diagnostic[] = [...parsed.diagnostics];
   if (kind !== 'storybook') {
     const adapter = runnerSourceAdapter(kind);
+    const isRunnerModule = runnerModuleMatcher(adapter.defaultModule, rules.runners?.[kind]?.testModules ?? [], relative);
     const detailKeys = Object.entries(rules.case.fields).filter(([, rule]) => rule.placement === 'detail').map(([key]) => key);
     const classificationKeys = Object.entries(rules.case.fields).filter(([, rule]) => rule.placement === 'classification').map(([key]) => key);
     traverse(parsed.ast, {
       CallExpression(callPath: NodePath<t.CallExpression>) {
         const call = callPath.node;
-        const shape = adapter.declaration(callPath);
+        const shape = adapter.declaration(callPath, isRunnerModule);
         if (!shape.name) {
           const statement = t.isExpressionStatement(callPath.parent) ? callPath.parent : undefined;
           const unsupported = statement ? markerYaml(immediateComment(statement), '@case', relative, Object.keys(rules.case.fields), 'TM207') : { found: false };

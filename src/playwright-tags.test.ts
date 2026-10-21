@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -97,6 +97,42 @@ describe('Playwright tags as case fields', () => {
     const result = await readTestSource(file, root, 'vitest', 'unit', loaded.rules, documents);
     expect(result.diagnostics).toEqual([]);
     expect(result.cases.map((item) => item.fields.rank)).toEqual(['S']);
+  });
+
+  it('reads tests imported from configured runner modules, including relative fixtures resolved by path', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-runner-modules-'));
+    const config = path.join(root, 'test-manager.yaml');
+    await writeFile(config, `${(await readFile(path.resolve('fixtures/valid/test-manager.yaml'), 'utf8'))}runners:\n  playwright:\n    testModules: ['@company/e2e/fixtures', 'apps/**/__e2e__/fixtures']\n`, 'utf8');
+    const loaded = await loadRules(config);
+    expect(loaded.diagnostics).toEqual([]);
+    if (!loaded.rules) throw new Error('rules did not load');
+    const rules = loaded.rules;
+    const ids = async (relative: string, specifier: string) => {
+      const file = path.join(root, relative);
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, `import { test } from '${specifier}';\n${marker}\ntest('case', { annotation: { type: 'case-id', description: 'CASE-950' } }, async () => {});\n`, 'utf8');
+      return (await readTestSource(file, root, 'playwright', 'e2e', rules, documents)).cases.map((item) => item.id);
+    };
+    expect(await ids('apps/web/screen/__e2e__/a.spec.ts', './fixtures')).toEqual(['CASE-950']);
+    expect(await ids('apps/web/screen/__e2e__/nested/b.spec.ts', '../fixtures.ts')).toEqual(['CASE-950']);
+    expect(await ids('apps/web/other/c.spec.ts', '@company/e2e/fixtures')).toEqual(['CASE-950']);
+    expect(await ids('apps/web/other/d.spec.ts', '@playwright/test')).toEqual(['CASE-950']);
+    expect(await ids('apps/web/screen/__e2e__/g.spec.ts', './fixtures/index.js')).toEqual(['CASE-950']);
+    expect(await ids('apps/web/screen/__e2e__/h.spec.ts', './fixtures.ts?raw')).toEqual(['CASE-950']);
+    expect(await ids('apps/web/other/e.spec.ts', './helpers')).toEqual([]);
+    expect(await ids('apps/web/other/f.spec.ts', '@company/other')).toEqual([]);
+  });
+
+  it('reads Vitest tests imported from configured modules', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-vitest-modules-'));
+    const config = path.join(root, 'test-manager.yaml');
+    await writeFile(config, `${(await readFile(path.resolve('fixtures/valid/test-manager.yaml'), 'utf8'))}runners:\n  vitest:\n    testModules: ['src/test-utils']\n`, 'utf8');
+    const loaded = await loadRules(config);
+    if (!loaded.rules) throw new Error('rules did not load');
+    const file = path.join(root, 'src/domain/a.test.ts');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, `import { it } from '../test-utils';\n${marker}\nit('case', { meta: { caseId: 'CASE-951' } }, () => {});\n`, 'utf8');
+    expect((await readTestSource(file, root, 'vitest', 'unit', loaded.rules, documents)).cases.map((item) => item.id)).toEqual(['CASE-951']);
   });
 
   it('rejects invalid tag templates and tag fields outside classification', async () => {
