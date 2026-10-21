@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import { checkProject } from './catalog.js';
+import { loadRules } from './rules.js';
 import { renderSite, writeSite } from './site.js';
 
 const fixture = path.resolve('fixtures/valid');
@@ -145,6 +146,73 @@ describe('project catalog', () => {
     expect(missing.every((item) => /\.(?:manual\.yaml|spec\.ts)$/u.test(item.location.file))).toBe(true);
     expect(missing.some((item) => item.location.file.endsWith('.manual.yaml'))).toBe(true);
     expect(missing.some((item) => item.location.file.endsWith('.spec.ts'))).toBe(true);
+  });
+
+  it('renders configured breakdown tables that count running cases and show stopped ones apart', async () => {
+    const plain = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    if (!plain.ok) throw new Error('fixture catalog must be valid');
+    expect((await renderSite(plain.catalog)).get('index.html')).not.toContain('class="breakdowns"');
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-breakdowns-'));
+    await cp(fixture, root, { recursive: true });
+    const config = path.join(root, 'test-manager.yaml');
+    await writeFile(config, `${await readFile(config, 'utf8')}reports:\n  breakdowns:\n    - { rows: domain, columns: impact }\n    - { rows: layer, columns: role }\n`, 'utf8');
+    const result = await checkProject(config);
+    if (!result.ok) throw new Error(JSON.stringify(result.diagnostics));
+    const index = (await renderSite(result.catalog)).get('index.html') ?? '';
+    const tables = [...index.matchAll(/<table>(.*?)<\/table>/gu)].map((match) => match[1] ?? '');
+    expect(tables).toHaveLength(2);
+    const text = (html: string) => html.replace(/<[^>]+>/gu, '|').replace(/\|+/gu, '|');
+    const statuses = result.catalog.cases.map((item) => item.status);
+    const stopped = statuses.filter((status) => status !== 'active').length;
+    expect(stopped).toBeGreaterThan(0);
+    expect(text(tables[0] ?? '')).toContain('|ドメイン × 影響度|');
+    expect(text(tables[0] ?? '')).toContain(`|合計|`);
+    expect(tables[0]).toContain(`<td>${result.catalog.cases.length - stopped} <small>停止 ${stopped}</small></td></tr></tbody>`);
+    expect(text(tables[1] ?? '')).toContain('|テスト層 × 確認担当|');
+    expect(text(tables[1] ?? '')).toContain('|プロダクト|');
+  });
+
+  it('keeps every breakdown cell consistent with its totals, and shows unset values and document paths', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-breakdown-cells-'));
+    await cp(fixture, root, { recursive: true });
+    const config = path.join(root, 'test-manager.yaml');
+    const source = (await readFile(config, 'utf8')).replace('    reason: {', '    tier: { required: false, placement: classification, type: enum, values: { gold: { description: gold } } }\n    reason: {');
+    await writeFile(config, `${source}reports:\n  breakdowns:\n    - { rows: belongsTo, columns: impact }\n    - { rows: tier, columns: source }\n`, 'utf8');
+    const result = await checkProject(config);
+    if (!result.ok) throw new Error(JSON.stringify(result.diagnostics));
+    const index = (await renderSite(result.catalog)).get('index.html') ?? '';
+    const tables = [...index.matchAll(/<table>(.*?)<\/table>/gu)].map((match) => match[1] ?? '');
+    const grid = (table: string) => [...table.matchAll(/<tr[^>]*>(.*?)<\/tr>/gu)].slice(1).map((row) => ({
+      label: /<th scope="row">(.*?)<\/th>/u.exec(row[1] ?? '')?.[1] ?? '',
+      counts: [...(row[1] ?? '').matchAll(/<td>(?:<span class="breakdown-zero">)?(\d+)/gu)].map((match) => Number(match[1])),
+    }));
+    const first = grid(tables[0] ?? '');
+    expect(first.map((row) => row.label)).toContain('受注 › 注文取消');
+    for (const row of first) expect(row.counts.slice(0, -1).reduce((sum, count) => sum + count, 0)).toBe(row.counts.at(-1));
+    const totals = first.at(-1)?.counts ?? [];
+    expect(first.slice(0, -1).reduce((sum, row) => sum + (row.counts.at(-1) ?? 0), 0)).toBe(totals.at(-1));
+    const running = result.catalog.cases.filter((item) => item.status === 'active').length;
+    expect(totals.at(-1)).toBe(running);
+    const second = grid(tables[1] ?? '');
+    expect(second.map((row) => row.label)).toEqual(['gold', '未設定', '合計']);
+    expect(second[1]?.counts.at(-1)).toBe(running);
+    expect(tables[1]).toContain('<th scope="col">manual</th><th scope="col">vitest</th><th scope="col">playwright</th><th scope="col">storybook</th>');
+  });
+
+  it('rejects breakdown axes that are not built in or classification enum and reference fields', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-breakdown-rules-'));
+    const source = await readFile(path.join(fixture, 'test-manager.yaml'), 'utf8');
+    for (const [name, breakdown, subject] of [
+      ['unknown', '{ rows: domain, columns: missing }', 'reports.breakdowns.0.columns'],
+      ['detail', '{ rows: reason, columns: layer }', 'reports.breakdowns.0.rows'],
+      ['same', '{ rows: layer, columns: layer }', 'reports.breakdowns.0.columns'],
+    ] as const) {
+      const config = path.join(root, `${name}.yaml`);
+      await writeFile(config, `${source}reports:\n  breakdowns:\n    - ${breakdown}\n`, 'utf8');
+      const loaded = await loadRules(config);
+      expect(loaded.rules, name).toBeUndefined();
+      expect(loaded.diagnostics.map((item) => item.subject), name).toContain(subject);
+    }
   });
 
   it('lists layer descriptions on the top page only when a layer has one', async () => {
