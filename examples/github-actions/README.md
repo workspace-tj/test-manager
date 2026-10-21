@@ -95,3 +95,14 @@ attachmentは`TM_STATE_DIR/runner-artifacts`配下だけに置きます。report
 runner stepは一時的に`continue-on-error`として、後続の統合とartifact公開を継続します。reporterが取得できた結果はrunner途中終了時にも保持されます。unit artifact自体が存在しない場合は`artifactMissing`となり、途中終了を示す`runnerError`とは区別されます。最後のstepでrunner失敗をjob failureへ戻します。
 
 manifestへ保存するCI情報は、workflowが明示したrun ID、attempt、commit、environment、scope、開始時刻、HTTP(S)のCI URLだけです。GitHub context全体やtoken、secretは保存しません。
+
+## PRへケースの変更をコメントする
+
+[`test-manager-pr-comment.yml`](test-manager-pr-comment.yml) は、PRのbaseとheadでcatalog snapshotを作り、追加・変更・削除されたケースをdomain・featureごとにPRへコメントします。
+
+- コメント本文は `test-manager pr-comment --base-snapshot <path> --head-snapshot <path> [--out <path>]` が作るMarkdownです。投稿は `gh pr comment` が行うため、test-manager本体はGitHub APIを使いません。ほかのホスティングでも同じ本文を投稿できます
+- 本文の先頭に `<!-- test-manager:pr-comment -->` を入れています。同じPRへの再実行では、この目印で始まる `github-actions[bot]` のコメントを探して更新し、なければ新しく投稿します
+- forkからのPRでは書き込み権限のないtokenになるため、jobをスキップします。`pull_request_target` はPRのコードを書き込み権限付きで動かすことになるため使いません
+- base側にまだ `test-manager.yaml` がない導入直後のPRでは、コメントせずに終了します
+- 1件のコメントは最大約6万文字に収め、超える分は件数だけを示して省略します
+

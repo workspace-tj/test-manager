@@ -152,6 +152,23 @@ describe('CLI process boundary', () => {
     expect(JSON.parse(schema.stdout)).toEqual(expect.objectContaining({ title: 'test-manager.yaml' }));
   });
 
+  it('prints a pull request comment from base and head snapshots', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-cli-pr-comment-'));
+    expect((await run(['snapshot', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--commit', '6e2b11a', '--out', path.join(root, 'base')])).code).toBe(0);
+    expect((await run(['snapshot', '--config', 'fixtures/quality-dashboard/test-manager.yaml', '--commit', '7f3a12c', '--out', path.join(root, 'head')])).code).toBe(0);
+    const baseFile = path.join(root, 'base/release-catalog.json');
+    const parsedBase = parseReleaseCatalogSnapshot(JSON.parse(await readFile(baseFile, 'utf8')));
+    if (!parsedBase.success) throw new Error('generated snapshot must parse');
+    await writeFile(baseFile, JSON.stringify({ ...parsedBase.data, cases: parsedBase.data.cases.filter((item) => item.id !== 'CASE-101') }));
+    const printed = await run(['pr-comment', '--base-snapshot', baseFile, '--head-snapshot', path.join(root, 'head/release-catalog.json')]);
+    expect(printed.code).toBe(0);
+    expect(printed.stdout).toContain('<!-- test-manager:pr-comment -->');
+    expect(printed.stdout).toContain('- 追加 `CASE-101`');
+    const out = path.join(root, 'comment.md');
+    expect((await run(['pr-comment', '--base-snapshot', baseFile, '--head-snapshot', path.join(root, 'head/release-catalog.json'), '--out', out])).code).toBe(0);
+    expect(await readFile(out, 'utf8')).toBe(`${printed.stdout.trimEnd()}\n`);
+  });
+
   it('builds a release catalog difference screen from production and staging inputs', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'test-manager-cli-release-'));
     const out = path.join(root, 'release');

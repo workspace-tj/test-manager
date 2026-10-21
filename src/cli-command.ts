@@ -1,4 +1,4 @@
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { checkProject } from './catalog.js';
@@ -21,6 +21,7 @@ import { loadDashboardStyles } from './dashboard-styles.js';
 import type { CliArguments } from './cli-arguments.js';
 import { readJsonInput } from './cli-input.js';
 import { initProject } from './init.js';
+import { renderPrComment } from './pr-comment.js';
 import { buildRunHistory, defaultHistoryWindow } from './run-history.js';
 import type { RunHistoryView } from './run-history.js';
 import type { TestRun } from './test-run.js';
@@ -96,6 +97,21 @@ export const executeCliCommand = async (parsed: CliArguments, output: CliOutput)
       return 1;
     }
     output.log(`init passed check: ${initialized.configPath}`);
+    return 0;
+  }
+  if (parsed.command === 'pr-comment') {
+    const [base, head] = await Promise.all([
+      readJsonInput(parsed.baseSnapshot, 'base catalog snapshot').then(parseReleaseCatalogSnapshot),
+      readJsonInput(parsed.headSnapshot, 'head catalog snapshot').then(parseReleaseCatalogSnapshot),
+    ]);
+    if (!base.success) throw new Error(`invalid base catalog snapshot: ${base.error.message}`);
+    if (!head.success) throw new Error(`invalid head catalog snapshot: ${head.error.message}`);
+    if (base.data.commit === head.data.commit) throw new Error(`base and head snapshots use the same commit ${base.data.commit}`);
+    const diff = buildReleaseDiff({ production: base.data, staging: { snapshot: head.data } });
+    if (!diff.ok) throw new Error(`invalid pull request comparison: ${diff.problems.join('; ')}`);
+    const comment = renderPrComment(diff.view);
+    if (parsed.out) await writeFile(parsed.out, comment, 'utf8');
+    else output.log(comment.trimEnd());
     return 0;
   }
   if (parsed.command === 'release') {

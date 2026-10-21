@@ -47,6 +47,12 @@ describe('CLI argument grammar', () => {
     expect(parseCliArguments(['schema', '--out', 'x'])).toBeUndefined();
   });
 
+  it('parses the pull request comment command with an optional output file', () => {
+    expect(parseCliArguments(['pr-comment', '--base-snapshot', 'base.json', '--head-snapshot', 'head.json'])).toEqual({ command: 'pr-comment', baseSnapshot: 'base.json', headSnapshot: 'head.json' });
+    expect(parseCliArguments(['pr-comment', '--base-snapshot', 'base.json', '--head-snapshot', 'head.json', '--out', 'comment.md'])).toEqual({ command: 'pr-comment', baseSnapshot: 'base.json', headSnapshot: 'head.json', out: 'comment.md' });
+    expect(parseCliArguments(['pr-comment', '--base-snapshot', 'base.json'])).toBeUndefined();
+  });
+
   it('accepts a history directory and window for daily pages only with the directory', () => {
     expect(parseCliArguments(['daily', '--config', 'c.yaml', '--out', 'site', '--current-run', 'run.json', '--history-dir', 'runs', '--history-window', '30'])).toEqual({
       command: 'daily', config: 'c.yaml', out: 'site', current: { type: 'run', path: 'run.json' }, historyDir: 'runs', historyWindow: 30,

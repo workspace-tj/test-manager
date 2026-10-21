@@ -1,0 +1,90 @@
+name: Test manager PR comment
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  comment:
+    # Pull requests from forks get a read-only token, so they are skipped instead of failing.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TM_TOOL_DIR: ${{ runner.temp }}/test-manager-tool
+      TM_STATE_DIR: ${{ runner.temp }}/test-manager-state
+      TM_BASE_DIR: ${{ runner.temp }}/test-manager-base
+      TM_TOOL_REF: ${{ vars.TEST_MANAGER_REF }}
+      TM_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      TM_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Validate pinned ref
+        shell: bash
+        run: |
+          if [[ ! "$TM_TOOL_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'TEST_MANAGER_REF must be a full 40-character commit SHA' >&2
+            exit 1
+          fi
+
+      - name: Checkout base commit outside the workspace
+        shell: bash
+        run: |
+          git fetch --depth 1 origin "$TM_BASE_SHA"
+          git worktree add --detach "$TM_BASE_DIR" FETCH_HEAD
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Fetch pinned test-manager
+        shell: bash
+        run: |
+          git init "$TM_TOOL_DIR"
+          git -C "$TM_TOOL_DIR" remote add origin https://github.com/workspace-tj/test-manager.git
+          git -C "$TM_TOOL_DIR" fetch --depth 1 origin "$TM_TOOL_REF"
+          git -C "$TM_TOOL_DIR" checkout --detach FETCH_HEAD
+          pnpm --dir "$TM_TOOL_DIR" install --frozen-lockfile
+          pnpm --dir "$TM_TOOL_DIR" build
+
+      - name: Snapshot base and head catalogs
+        shell: bash
+        run: |
+          if [[ ! -f "$TM_BASE_DIR/test-manager.yaml" ]]; then
+            echo 'The base commit has no test-manager.yaml yet; skipping the comment.'
+            exit 0
+          fi
+          node "$TM_TOOL_DIR/dist/cli-entry.js" snapshot --config "$TM_BASE_DIR/test-manager.yaml" --commit "$TM_BASE_SHA" --out "$TM_STATE_DIR/base"
+          node "$TM_TOOL_DIR/dist/cli-entry.js" snapshot --config test-manager.yaml --commit "$TM_HEAD_SHA" --out "$TM_STATE_DIR/head"
+
+      - name: Render comment
+        if: hashFiles(format('{0}/base/release-catalog.json', env.TM_STATE_DIR)) != ''
+        run: node "$TM_TOOL_DIR/dist/cli-entry.js" pr-comment --base-snapshot "$TM_STATE_DIR/base/release-catalog.json" --head-snapshot "$TM_STATE_DIR/head/release-catalog.json" --out "$TM_STATE_DIR/comment.md"
+
+      - name: Create or update the comment
+        if: hashFiles(format('{0}/comment.md', env.TM_STATE_DIR)) != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          marker='<!-- test-manager:pr-comment -->'
+          comment_id=$(gh api --paginate "repos/$REPOSITORY/issues/$PR_NUMBER/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | tail -n 1)
+          if [[ -n "$comment_id" ]]; then
+            gh api --method PATCH "repos/$REPOSITORY/issues/comments/$comment_id" -F "body=@$TM_STATE_DIR/comment.md" > /dev/null
+          else
+            gh pr comment "$PR_NUMBER" --body-file "$TM_STATE_DIR/comment.md"
+          fi

@@ -1,6 +1,7 @@
 export const cliUsage = `Usage:
   test-manager init [--dir <path>] [--force]
   test-manager schema
+  test-manager pr-comment --base-snapshot <path> --head-snapshot <path> [--out <path>]
   test-manager check --config <path>
   test-manager build --config <path> --out <path>
   test-manager snapshot --config <path> --commit <sha> --out <path>
@@ -16,6 +17,7 @@ type ManualEvidenceOptions = Readonly<{ manualResults: ReadonlyArray<string>; ma
 export type CliArguments =
   | Readonly<{ command: 'init'; dir: string; force: boolean }>
   | Readonly<{ command: 'schema' }>
+  | Readonly<{ command: 'pr-comment'; baseSnapshot: string; headSnapshot: string; out?: string }>
   | Readonly<{ command: 'check'; config: string }>
   | Readonly<{ command: 'build'; config: string; out: string }>
   | Readonly<{ command: 'snapshot'; config: string; commit: string; out: string }>
@@ -28,6 +30,7 @@ const allowedFlags: Readonly<Record<Command, ReadonlySet<string>>> = {
   check: new Set(['--config']),
   build: new Set(['--config', '--out']),
   snapshot: new Set(['--config', '--commit', '--out']),
+  'pr-comment': new Set(['--base-snapshot', '--head-snapshot', '--out']),
   daily: new Set(['--config', '--out', '--stylesheet', '--current-run', '--previous-run', '--manifest', '--completed-at', '--unit-artifact', '--history-dir', '--history-window']),
   release: new Set(['--production-snapshot', '--staging-snapshot', '--latest-staging-run', '--manual-results', '--manual-snapshot', '--stylesheet', '--out']),
   dashboard: new Set(['--config', '--current-run', '--previous-run', '--history-dir', '--history-window', '--production-snapshot', '--staging-snapshot', '--latest-staging-run', '--manual-results', '--manual-snapshot', '--stylesheet', '--out']),
@@ -65,7 +68,7 @@ export const parseCliArguments = (args: ReadonlyArray<string>): CliArguments | u
     }
     return { command, dir: dir ?? '.', force };
   }
-  if (command !== 'check' && command !== 'build' && command !== 'snapshot' && command !== 'daily' && command !== 'release' && command !== 'dashboard') return undefined;
+  if (command !== 'check' && command !== 'build' && command !== 'snapshot' && command !== 'daily' && command !== 'release' && command !== 'dashboard' && command !== 'pr-comment') return undefined;
   const flags = collectFlags(command, args);
   if (!flags) return undefined;
   const value = (flag: string): string | undefined => flags.get(flag)?.[0];
@@ -77,6 +80,11 @@ export const parseCliArguments = (args: ReadonlyArray<string>): CliArguments | u
   const history = { ...(historyDir ? { historyDir } : {}), ...(historyWindow ? { historyWindow } : {}) };
   const manualEvidence = { manualResults: flags.get('--manual-results') ?? [], manualSnapshots: flags.get('--manual-snapshot') ?? [] };
   const out = value('--out');
+  if (command === 'pr-comment') {
+    const baseSnapshot = value('--base-snapshot');
+    const headSnapshot = value('--head-snapshot');
+    return baseSnapshot && headSnapshot ? { command, baseSnapshot, headSnapshot, ...(out ? { out } : {}) } : undefined;
+  }
   if (command === 'check') return config ? { command, config } : undefined;
   if (command === 'build') return config && out ? { command, config, out } : undefined;
   if (command === 'snapshot') {
