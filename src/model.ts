@@ -31,7 +31,12 @@ export type FieldRule = FieldRequiredness & Readonly<
     uniqueItems?: boolean | undefined;
   }
   | {
-    type: 'enum' | 'integer-enum';
+    type: 'enum';
+    values: Readonly<Record<string, Readonly<{ label?: string; description: string }>>>;
+    playwrightTag?: string;
+  }
+  | {
+    type: 'integer-enum';
     values: Readonly<Record<string, Readonly<{ label?: string; description: string }>>>;
   }
   | { type: 'text' }

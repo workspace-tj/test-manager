@@ -274,6 +274,9 @@
                       ],
                       "additionalProperties": false
                     }
+                  },
+                  "playwrightTag": {
+                    "type": "string"
                   }
                 },
                 "required": [

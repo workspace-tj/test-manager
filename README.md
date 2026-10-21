@@ -298,6 +298,41 @@ test(
 );
 ```
 
+`enum` の項目に `playwrightTag` を指定すると、Playwright のケースではその値をタグから読みます。`@case` には書きません。
+
+```yaml
+case:
+  fields:
+    rank:
+      type: enum
+      placement: classification
+      required: true
+      playwrightTag: "@rank-{value}"
+      values:
+        S: { description: 壊れると金額や権限に関わる }
+        A: { description: 主要な操作に影響する }
+```
+
+```ts
+test.describe('請求書', { tag: '@regression' }, () => {
+  /**
+   * @case
+   * belongsTo: invoice-issue
+   */
+  test(
+    '請求書を発行できる',
+    { tag: '@rank-A', annotation: { type: 'case-id', description: 'CASE-202' } },
+    async () => {},
+  );
+});
+```
+
+- `{value}` を enum の値に置き換えたタグを読みます。テンプレートに合っても値が enum にないタグや、どの項目にも合わないタグは無視し、Playwright の絞り込みなどに使えます
+- テストと、それをコード上で囲む `test.describe` のタグを合わせて読みます。別の関数の中で定義したテストを `test.describe` から呼ぶ場合、その `test.describe` のタグは読めません（Playwright は実行時に付けます）
+- 1つの項目に2つ以上の値のタグがある場合（TM212）、タグを静的に読めない場合（変数の options、spread、変数のタグなど。TM211）、タグで読む項目を `@case` に書いた場合（TM213）は診断します
+- テスト名の中に書いたタグ（`'請求書を発行できる @smoke'`）は読みません
+- Vitest と手動ケースでは、これまでどおり `@case` に書きます
+
 ### Storybook
 
 Story の明示的な `name` の先頭へケース ID を入れます。

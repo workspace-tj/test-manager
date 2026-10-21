@@ -11,6 +11,7 @@ import type { Diagnostic, KnowledgeDocument, Location, ManagedCase, ProjectRules
 import { diagnostic, location } from './diagnostics.js';
 import { ambiguousObject, objectProperty, stringValue } from './source-ast.js';
 import { runnerSourceAdapter } from './source-runner-adapters.js';
+import { collectPlaywrightTags, fieldsFromTags, tagFieldNames } from './playwright-tags.js';
 import { storybookDeclarations } from './source-storybook-adapter.js';
 import { isRecord, parseStrictYaml } from './yaml.js';
 import { yamlPathLine } from './yaml.js';
@@ -145,8 +146,21 @@ export const readTestSource = async (
         if (!rawId) diagnostics.push(diagnostic('TM205', relative, title, adapter.idRequirement, line));
         const id = caseIdSchema(new RegExp(rules.idPattern)).safeParse(rawId);
         if (rawId && !id.success) diagnostics.push(diagnostic('TM206', relative, rawId, 'case ID does not match idPattern', line));
-        if (!before.value || (details.found && !details.value) || !id.success || shape.dynamicEach || extractedId.invalidMultiplicity || extractedId.unsupportedShape) return;
-        const fields = parseCaseFields({ ...before.value, ...details.value }, { source: kind, layer }, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
+        let tagged: Readonly<Record<string, string>> = {};
+        let tagProblem = false;
+        if (kind === 'playwright' && tagFieldNames(rules.case.fields).length > 0) {
+          const collected = collectPlaywrightTags(callPath, shape.name);
+          if (collected.dynamic) diagnostics.push(diagnostic('TM211', relative, title, 'tags must be static strings so tag fields can be read', line));
+          const fromTags = fieldsFromTags(collected.tags, rules.case.fields);
+          for (const conflict of fromTags.conflicts) diagnostics.push(diagnostic('TM212', relative, title, `tags set ${conflict.field} to several values: ${conflict.values.join(', ')}`, line));
+          for (const name of tagFieldNames(rules.case.fields)) if (before.value && name in before.value) {
+            diagnostics.push(diagnostic('TM213', relative, title, `${name} must be written as a Playwright tag, not in @case`, line));
+          }
+          tagProblem = collected.dynamic || fromTags.conflicts.length > 0 || tagFieldNames(rules.case.fields).some((name) => before.value !== undefined && name in before.value);
+          tagged = fromTags.values;
+        }
+        if (!before.value || (details.found && !details.value) || !id.success || shape.dynamicEach || extractedId.invalidMultiplicity || extractedId.unsupportedShape || tagProblem) return;
+        const fields = parseCaseFields({ ...before.value, ...tagged, ...details.value }, { source: kind, layer }, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
         if (!fields.ok) {
           diagnostics.push(...fields.diagnostics);
           return;
