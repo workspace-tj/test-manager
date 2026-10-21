@@ -105,12 +105,30 @@ export const renderCatalogSite = (catalog: Catalog, integrated = false): Readonl
   const renderTree = (parent: string | undefined): string => { const children = documents.filter((document) => document.parent === parent); return children.length ? `<ul>${children.map((document) => `<li><div>${linkDocument(document)}</div>${renderTree(document.id)}</li>`).join('')}</ul>` : ''; };
   files.set('documents/index.html', layout('仕様・判断', 'documents', '../', `<div class="page-heading"><h1>仕様・判断</h1></div><nav class="document-tree" aria-label="仕様と判断の階層">${renderTree(undefined)}</nav>`));
 
+  // Feature pages read like a spec review: what the feature does, then its edge cases and rejections, then non-functional checks.
+  // The axes are the conventional `characteristic` and `path` enum fields; a project without them gets a flat list.
+  const groupingAxes = ['characteristic', 'path'].flatMap((name) => {
+    const rule = catalog.rules.case.fields[name];
+    return rule?.type === 'enum' ? [{ name, values: Object.entries(rule.values).map(([value, definition]) => ({ value, label: definition.label ?? value })) }] : [];
+  });
+  const caseItem = (item: ManagedCase): string => `<li>${linkCase(item)} <small>${escapeHtml(item.layer)} · ${escapeHtml(item.source)}</small></li>`;
+  const groupedCaseList = (items: readonly ManagedCase[], axes = groupingAxes, depth = 3): string => {
+    if (items.length === 0) return '<ul><li>0件</li></ul>';
+    const [axis, ...rest] = axes;
+    if (!axis) return `<ul>${items.map(caseItem).join('')}</ul>`;
+    const groups = [...axis.values, { value: undefined, label: '未設定' }]
+      .map((group) => ({ ...group, items: items.filter((item) => group.value === undefined ? !axis.values.some(({ value }) => value === item.fields[axis.name]) : item.fields[axis.name] === group.value) }))
+      .filter((group) => group.items.length > 0);
+    // A level where nothing has a value adds only a lone 未設定 heading, so skip it.
+    if (groups.length === 1 && groups[0]?.value === undefined) return groupedCaseList(items, rest, depth);
+    return groups.map((group) => `<h${depth}>${escapeHtml(group.label)} <small>${group.items.length}件</small></h${depth}>${groupedCaseList(group.items, rest, depth + 1)}`).join('');
+  };
   for (const document of documents) {
     const related = (document.refs ?? []).flatMap((id) => { const item = byId.get(id); return item ? [item] : []; });
     const referenced = cases.filter((item) => Array.isArray(item.fields.refs) && item.fields.refs.includes(document.id));
     const crumb = pathOf(document).map((item) => item.id === document.id ? escapeHtml(item.title) : linkDocument(item)).join(' › ');
     const children = documents.filter((item) => item.parent === document.id);
-    files.set(`documents/${safeName(document.id)}.html`, layout(document.title, 'documents', '../', `<p>${crumb}</p><h1>${escapeHtml(document.title)}</h1><p><code>${escapeHtml(document.id)}</code> · ${escapeHtml(document.kind)}</p><article>${markdown(document.body)}</article><h2>配下の文書</h2><ul>${children.map((item) => `<li>${linkDocument(item)} <small>${escapeHtml(item.kind)}</small></li>`).join('') || '<li>0件</li>'}</ul><h2>関連文書</h2><ul>${related.map((item) => `<li>${linkDocument(item)}</li>`).join('') || '<li>0件</li>'}</ul><h2>確認定義</h2><p>${caseCount(document)}</p><ul>${casesBelow(document).map((item) => `<li>${linkCase(item)}</li>`).join('') || '<li>0件</li>'}</ul><h2>関連ケース</h2><ul>${referenced.map((item) => `<li>${linkCase(item)}</li>`).join('') || '<li>0件</li>'}</ul><p>Source: <code>${escapeHtml(document.location.file)}</code></p>`));
+    files.set(`documents/${safeName(document.id)}.html`, layout(document.title, 'documents', '../', `<p>${crumb}</p><h1>${escapeHtml(document.title)}</h1><p><code>${escapeHtml(document.id)}</code> · ${escapeHtml(document.kind)}</p><article>${markdown(document.body)}</article><h2>配下の文書</h2><ul>${children.map((item) => `<li>${linkDocument(item)} <small>${escapeHtml(item.kind)}</small></li>`).join('') || '<li>0件</li>'}</ul><h2>関連文書</h2><ul>${related.map((item) => `<li>${linkDocument(item)}</li>`).join('') || '<li>0件</li>'}</ul><h2>確認定義</h2><p>${caseCount(document)}</p>${groupedCaseList(casesBelow(document))}<h2>関連ケース</h2><ul>${referenced.map((item) => `<li>${linkCase(item)}</li>`).join('') || '<li>0件</li>'}</ul><p>Source: <code>${escapeHtml(document.location.file)}</code></p>`));
   }
   const fieldRules = catalog.rules.case.fields;
   // Field values as the project names them: enum labels, linked documents, and lists, instead of raw JSON.

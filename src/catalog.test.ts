@@ -238,6 +238,31 @@ describe('project catalog', () => {
     expect(page).not.toContain('&quot;belongsTo&quot;');
   });
 
+  it('groups a document page by characteristic, then path, in the order the config lists their values', async () => {
+    const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    if (!result.ok) throw new Error('fixture catalog must be valid');
+    const { catalog } = result;
+    const enumRule = (values: string[]) => ({ type: 'enum' as const, placement: 'classification' as const, required: false, values: Object.fromEntries(values.map((value) => [value, { label: `L-${value}`, description: value }])) });
+    const [first, second, third] = catalog.cases;
+    if (!first || !second || !third) throw new Error('fixture must contain three cases');
+    const document = first.fields.belongsTo;
+    const fields = [{ characteristic: 'security', path: 'normal' }, { characteristic: 'functional', path: 'error' }, { path: 'normal' }];
+    const grouped = { ...catalog, rules: { ...catalog.rules, case: { ...catalog.rules.case, fields: { ...catalog.rules.case.fields, characteristic: enumRule(['functional', 'security']), path: enumRule(['normal', 'error']) } } },
+      cases: catalog.cases.map((item, index) => index < 3 ? { ...item, fields: { ...item.fields, belongsTo: document, ...fields[index] } } : item) } as typeof catalog;
+    const page = (await renderSite(grouped)).get(`documents/${document}.html`) ?? '';
+    const headings = [...page.matchAll(/<h([34])>([^<]+) <small>(\d+)件<\/small><\/h\1>/gu)].map((match) => `${match[1]}:${match[2]}:${match[3]}`);
+    expect(headings.slice(0, 4)).toEqual(['3:L-functional:1', '4:L-error:1', '3:L-security:1', '4:L-normal:1']);
+    expect(headings[4]).toMatch(/^3:未設定:\d+$/u);
+    expect(headings[5]).toBe('4:L-normal:1');
+    const pathOnly = { ...grouped, rules: { ...grouped.rules, case: { ...grouped.rules.case, fields: { ...catalog.rules.case.fields, path: enumRule(['normal', 'error']) } } },
+      cases: grouped.cases.map((item, index) => index === 1 ? { ...item, fields: { ...item.fields, path: 'unknown' } } : item) } as typeof catalog;
+    const pathPage = (await renderSite(pathOnly)).get(`documents/${document}.html`) ?? '';
+    expect([...pathPage.matchAll(/<h([34])>([^<]+) <small>/gu)].map((match) => `${match[1]}:${match[2]}`)).toEqual(['3:L-normal', '3:未設定']);
+    const flat = (await renderSite(catalog)).get(`documents/${document}.html`) ?? '';
+    expect(flat).not.toMatch(/<h[34]>/u);
+    expect(flat).toMatch(/<li><a href="\.\.\/cases\/[^"]+\.html">[^<]+<\/a> <small>[^<]+ · [^<]+<\/small><\/li>/u);
+  });
+
   it('escapes field values and marks references to missing documents on case pages', async () => {
     const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
     if (!result.ok) throw new Error('fixture catalog must be valid');
