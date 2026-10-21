@@ -22,6 +22,27 @@ describe('unsupported source syntax', () => {
     expect(await readTestSource(storyFile, root, 'storybook', 'unit', loaded.rules, [])).toEqual({ cases: [], diagnostics: [] });
   });
 
+  it('reads generic arrow functions in .ts files and JSX in .tsx files', async () => {
+    const loaded = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
+    if (!loaded.rules) return;
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-ts-generics-'));
+    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'domain', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
+    const body = `/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest('case', { meta: { caseId: 'CASE-999' } }, () => {});\n`;
+    const generic = path.join(root, 'generic.test.ts');
+    await writeFile(generic, `import { test } from 'vitest';\nconst identity = <T,>(value: T): T => value;\nconst cast = <T>(value: unknown) => value as T;\n${body}`, 'utf8');
+    const typed = await readTestSource(generic, root, 'vitest', 'unit', loaded.rules, documents);
+    expect(typed.diagnostics).toEqual([]);
+    expect(typed.cases.map((item) => item.id)).toEqual(['CASE-999']);
+    const component = path.join(root, 'component.test.tsx');
+    await writeFile(component, `import { test } from 'vitest';\nconst view = <div>ok</div>;\n${body}`, 'utf8');
+    const tsx = await readTestSource(component, root, 'vitest', 'unit', loaded.rules, documents);
+    expect(tsx.diagnostics).toEqual([]);
+    expect(tsx.cases.map((item) => item.id)).toEqual(['CASE-999']);
+    const misplaced = path.join(root, 'misplaced.test.ts');
+    await writeFile(misplaced, `import { test } from 'vitest';\nconst view = <div>ok</div>;\n${body}`, 'utf8');
+    expect((await readTestSource(misplaced, root, 'vitest', 'unit', loaded.rules, documents)).diagnostics.map((item) => item.code)).toEqual(['TM200']);
+  });
+
   it('rejects classification fields in @case-doc at the real source line', async () => {
     const loaded = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
     if (!loaded.rules) return;

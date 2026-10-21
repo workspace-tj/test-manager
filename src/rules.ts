@@ -31,7 +31,8 @@ const conditionValuePath = (condition: z.infer<typeof RequiredWhenSchema>, index
 
 const RequirednessShape = {
   label: z.string().min(1).optional(),
-  required: z.boolean(),
+  // Optional only when requiredWhen states the condition; otherwise every field says whether it is required.
+  required: z.boolean().optional(),
   placement: z.enum(['classification', 'detail']),
   requiredWhen: RequiredWhenSchema.optional(),
 } as const;
@@ -53,6 +54,7 @@ const FieldRuleSchema = z.discriminatedUnion('type', [
   z.object({ ...RequirednessShape, type: z.literal('text-list'), minItems: z.number().int().nonnegative().optional(), uniqueItems: z.boolean().optional() }).strict(),
 ]).superRefine((field, context) => {
   if (field.required && field.requiredWhen) context.addIssue({ code: 'custom', message: 'required and requiredWhen are mutually exclusive' });
+  if (field.required === undefined && !field.requiredWhen) context.addIssue({ code: 'custom', path: ['required'], message: 'required must be set unless requiredWhen is given' });
 });
 
 const GlobsSchema = z.array(z.string().min(1)).min(1);
@@ -158,7 +160,7 @@ const RulesSchema = RulesShape.superRefine(validateRuleRelationships);
 
 export const rulesJsonSchema = (): Record<string, unknown> => ({
   title: 'test-manager.yaml',
-  description: 'Structure of a test-manager project configuration. Rules that relate several values (document kinds, requiredWhen targets, required/requiredWhen exclusivity, reserved field names) are checked by `test-manager check`, not by this schema.',
+  description: 'Structure of a test-manager project configuration. Rules that relate several values (document kinds, requiredWhen targets, required/requiredWhen exclusivity, required being set unless requiredWhen is given, reserved field names) are checked by `test-manager check`, not by this schema.',
   ...z.toJSONSchema(RulesShape, { io: 'input' }),
 });
 

@@ -1,6 +1,6 @@
 {
   "title": "test-manager.yaml",
-  "description": "Structure of a test-manager project configuration. Rules that relate several values (document kinds, requiredWhen targets, required/requiredWhen exclusivity, reserved field names) are checked by `test-manager check`, not by this schema.",
+  "description": "Structure of a test-manager project configuration. Rules that relate several values (document kinds, requiredWhen targets, required/requiredWhen exclusivity, required being set unless requiredWhen is given, reserved field names) are checked by `test-manager check`, not by this schema.",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "properties": {
@@ -209,7 +209,6 @@
                   }
                 },
                 "required": [
-                  "required",
                   "placement",
                   "type",
                   "targetKinds"
@@ -258,7 +257,6 @@
                   }
                 },
                 "required": [
-                  "required",
                   "placement",
                   "type",
                   "targetKinds"
@@ -317,7 +315,6 @@
                   }
                 },
                 "required": [
-                  "required",
                   "placement",
                   "type",
                   "values"
@@ -373,7 +370,6 @@
                   }
                 },
                 "required": [
-                  "required",
                   "placement",
                   "type",
                   "values"
@@ -406,7 +402,6 @@
                   }
                 },
                 "required": [
-                  "required",
                   "placement",
                   "type"
                 ],
@@ -446,7 +441,6 @@
                   }
                 },
                 "required": [
-                  "required",
                   "placement",
                   "type"
                 ],
