@@ -10,6 +10,9 @@ const KindRuleSchema = z.object({
   parent: z.object({ required: z.boolean(), targetKinds: z.array(z.string().min(1)) }).strict(),
 }).strict();
 
+// A Playwright tag template such as `@rank-{value}`; the enum value replaces `{value}`.
+const PlaywrightTagSchema = z.string().refine((value) => value.startsWith('@') && value.split('{value}').length === 2, 'must start with @ and contain {value} exactly once');
+
 const RequirednessShape = {
   label: z.string().min(1).optional(),
   required: z.boolean(),
@@ -28,7 +31,7 @@ const DisplayOrderSchema = z.record(
 const FieldRuleSchema = z.discriminatedUnion('type', [
   z.object({ ...RequirednessShape, type: z.literal('reference'), targetKinds: z.array(z.string().min(1)).min(1) }).strict(),
   z.object({ ...RequirednessShape, type: z.literal('reference-list'), targetKinds: z.array(z.string().min(1)).min(1), minItems: z.number().int().nonnegative().optional(), uniqueItems: z.boolean().optional() }).strict(),
-  z.object({ ...RequirednessShape, type: z.literal('enum'), values: ValuesSchema }).strict(),
+  z.object({ ...RequirednessShape, type: z.literal('enum'), values: ValuesSchema, playwrightTag: PlaywrightTagSchema.optional() }).strict(),
   z.object({ ...RequirednessShape, type: z.literal('integer-enum'), values: ValuesSchema }).strict(),
   z.object({ ...RequirednessShape, type: z.literal('text') }).strict(),
   z.object({ ...RequirednessShape, type: z.literal('text-list'), minItems: z.number().int().nonnegative().optional(), uniqueItems: z.boolean().optional() }).strict(),
@@ -68,6 +71,9 @@ const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z
   if (refs && refs.type !== 'reference-list') context.addIssue({ code: 'custom', path: ['case', 'fields', 'refs'], message: 'refs must be a reference-list field' });
   if (refs?.placement === 'detail') context.addIssue({ code: 'custom', path: ['case', 'fields', 'refs', 'placement'], message: 'refs must be a classification field' });
   for (const [name, field] of Object.entries(rules.case.fields)) {
+    if (field.type === 'enum' && field.playwrightTag !== undefined && field.placement !== 'classification') {
+      context.addIssue({ code: 'custom', path: ['case', 'fields', name, 'playwrightTag'], message: 'playwrightTag requires a classification field' });
+    }
     if (field.requiredWhen?.field === 'source') {
       if (!(caseSources as ReadonlyArray<unknown>).includes(field.requiredWhen.equals)) context.addIssue({ code: 'custom', path: ['case', 'fields', name, 'requiredWhen', 'equals'], message: `source must be one of ${caseSources.join(', ')}` });
     } else if (field.requiredWhen?.field === 'layer') {
@@ -130,7 +136,7 @@ const normalizeFieldRule = (field: z.infer<typeof FieldRuleSchema>): FieldRule =
   switch (field.type) {
     case 'reference': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, targetKinds: field.targetKinds };
     case 'reference-list': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, targetKinds: field.targetKinds, ...(field.minItems !== undefined ? { minItems: field.minItems } : {}), ...(field.uniqueItems !== undefined ? { uniqueItems: field.uniqueItems } : {}) };
-    case 'enum': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, values: normalizeEnumValues(field.values) };
+    case 'enum': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, values: normalizeEnumValues(field.values), ...(field.playwrightTag !== undefined ? { playwrightTag: field.playwrightTag } : {}) };
     case 'integer-enum': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, values: normalizeEnumValues(field.values) };
     case 'text': return { ...requiredness, ...presentation, placement: field.placement, type: field.type };
     case 'text-list': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, ...(field.minItems !== undefined ? { minItems: field.minItems } : {}), ...(field.uniqueItems !== undefined ? { uniqueItems: field.uniqueItems } : {}) };
