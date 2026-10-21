@@ -423,6 +423,37 @@
         "fields"
       ],
       "additionalProperties": false
+    },
+    "reports": {
+      "type": "object",
+      "properties": {
+        "breakdowns": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rows": {
+                "type": "string",
+                "minLength": 1
+              },
+              "columns": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "rows",
+              "columns"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "breakdowns"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

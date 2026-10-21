@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { diagnostic } from './diagnostics.js';
 import { caseSources, type Diagnostic, type FieldRule, type ProjectRules } from './model.js';
 import { parseStrictYaml, yamlPathLine } from './yaml.js';
+import { breakdownBuiltInAxes, breakdownFieldAllowed } from './breakdowns.js';
 
 const KindRuleSchema = z.object({
   description: z.string().min(1),
@@ -72,6 +73,9 @@ const RulesShape = z.object({
     displayOrder: DisplayOrderSchema.optional().default({}),
   }).strict(),
   case: z.object({ fields: z.record(z.string(), FieldRuleSchema) }).strict(),
+  reports: z.object({
+    breakdowns: z.array(z.object({ rows: z.string().min(1), columns: z.string().min(1) }).strict()).min(1),
+  }).strict().optional(),
 }).strict();
 
 const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z.RefinementCtx): void => {
@@ -124,6 +128,14 @@ const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z
       context.addIssue({ code: 'custom', path: ['documents', 'kinds', kind, 'parent', 'targetKinds'], message: `unknown document kind ${targetKind}` });
     }
   }
+  rules.reports?.breakdowns.forEach((breakdown, index) => {
+    for (const axis of ['rows', 'columns'] as const) {
+      const name = breakdown[axis];
+      if ((breakdownBuiltInAxes as ReadonlyArray<string>).includes(name)) continue;
+      if (!breakdownFieldAllowed(rules.case.fields[name])) context.addIssue({ code: 'custom', path: ['reports', 'breakdowns', index, axis], message: `${name} must be ${breakdownBuiltInAxes.join(', ')}, or a classification enum, integer-enum, or reference field` });
+    }
+    if (breakdown.rows === breakdown.columns) context.addIssue({ code: 'custom', path: ['reports', 'breakdowns', index, 'columns'], message: 'rows and columns must differ' });
+  });
   for (const kind of Object.keys(rules.documents.displayOrder)) if (rules.documents.kinds[kind] === undefined) {
     context.addIssue({ code: 'custom', path: ['documents', 'displayOrder', kind], message: `unknown document kind ${kind}` });
   }

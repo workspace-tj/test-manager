@@ -222,6 +222,22 @@ case:
 
 設定に未知のキー、矛盾した必須条件、存在しない文書 kind への参照がある場合は、起動時に拒否します。
 
+### reports.breakdowns
+
+カタログのトップ画面に、ケースの件数を2つの軸で数えた表を出します。任意です。
+
+```yaml
+reports:
+  breakdowns:
+    - { rows: domain, columns: rank }
+    - { rows: belongsTo, columns: layer }
+```
+
+- 軸には `domain`（`belongsTo` の文書の最上位）、`layer`、`source` と、`classification` の `enum`・`integer-enum`・`reference` の項目を使えます
+- `reference` の軸は、参照先にできる文書をすべて並べ、上位の文書を「›」でつないで示します。ケースが0件の文書も、手薄な箇所が分かるよう 0 として残します
+- 数は動いているケースです。skip・todo のケースは数に含めず、「停止 N」として別に示します
+- 値のないケースは「未設定」の行・列に数えます
+
 ## 仕様・判断とケースを記述する
 
 ### 仕様・判断文書
