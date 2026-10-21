@@ -401,9 +401,9 @@ node dist/cli-entry.js check --config ./test-manager.yaml
 
 ## 静的解析の対応境界
 
-対応するのは、各ランナーから直接 import した標準宣言、静的文字列タイトル、object literal の options、inline 配列リテラルの `each`、object literal の Story です。
+対応するのは、各ランナー（または `runners.*.testModules` に書いた fixtures）から import した標準宣言、静的文字列タイトル、object literal の options、`each`、object literal の Story です。`each` の表は、その場の配列リテラルか同じファイルの `const` なら値として読み（`as const`・`satisfies` は外して読みます）、それ以外（import した表、関数で作る値を含む表、テンプレートの表）はコードのままケースに残します。どちらも1つの `each` を1件のケースとし、表はケースのページとケース検索に出します。
 
-動的タイトル、動的 each、独自 wrapper、外部データからの生成、Story factory は、診断対象または対象外として明示します。対象ソースを実行して推測することはありません。
+動的タイトル、独自 wrapper、外部データからの生成、Story factory は、診断対象または対象外として明示します。対象ソースを実行して推測することはありません。
 
 ツールが検査するのは構造的な整合性です。ケース名が確認内容を正しく表しているか、条件・理由が十分か、実装と記述が意味的に一致しているかは、人がレビューします。
 

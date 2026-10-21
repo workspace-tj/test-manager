@@ -28,7 +28,14 @@ export const ambiguousObject = (object: t.ObjectExpression): boolean => {
   return false;
 };
 
-export const staticValue = (node: t.Node | null | undefined): Readonly<{ ok: true; value: unknown } | { ok: false }> => {
+// Type-only wrappers such as `as const` and `satisfies T` do not change the value.
+export const unwrapTypeAssertions = (node: t.Node | null | undefined): t.Node | null | undefined =>
+  t.isTSAsExpression(node) || t.isTSSatisfiesExpression(node) || t.isTSNonNullExpression(node) || t.isTSTypeAssertion(node) || t.isParenthesizedExpression(node)
+    ? unwrapTypeAssertions(node.expression)
+    : node;
+
+export const staticValue = (input: t.Node | null | undefined): Readonly<{ ok: true; value: unknown } | { ok: false }> => {
+  const node = unwrapTypeAssertions(input);
   if (t.isStringLiteral(node) || t.isNumericLiteral(node) || t.isBooleanLiteral(node)) return { ok: true, value: node.value };
   if (t.isNullLiteral(node)) return { ok: true, value: null };
   if (t.isUnaryExpression(node) && (node.operator === '-' || node.operator === '+') && t.isNumericLiteral(node.argument)) return { ok: true, value: node.operator === '-' ? -node.argument.value : node.argument.value };

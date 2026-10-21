@@ -1,7 +1,7 @@
 import type { NodePath } from '@babel/traverse';
 import * as t from '@babel/types';
 import type { ManagedCase, SourceKind } from './model.js';
-import { ambiguousObject, memberName, objectProperty, staticValue, stringValue } from './source-ast.js';
+import { ambiguousObject, memberName, objectProperty, staticValue, stringValue, unwrapTypeAssertions } from './source-ast.js';
 
 type ExtractedCaseId = Readonly<{
   id?: string;
@@ -11,7 +11,11 @@ type ExtractedCaseId = Readonly<{
 
 type RunnerKind = Exclude<SourceKind, 'storybook'>;
 type CaseStatus = ManagedCase['status'];
-type Declaration = Readonly<{ name?: string; parameters?: ReadonlyArray<unknown>; dynamicEach?: boolean }>;
+// An each table that cannot be read as values keeps the position of its source text instead.
+type Declaration = Readonly<{ name?: string; parameters?: ReadonlyArray<unknown>; dynamicEach?: boolean; tableRange?: Readonly<{ start: number; end: number }> }>;
+
+const rangeOf = (node: t.Node | null | undefined): Readonly<{ tableRange?: Readonly<{ start: number; end: number }> }> =>
+  node && typeof node.start === 'number' && typeof node.end === 'number' ? { tableRange: { start: node.start, end: node.end } } : {};
 
 // Whether an import specifier names a module that provides the runner's `test` / `it`.
 export type RunnerModuleMatcher = (specifier: string) => boolean;
@@ -67,6 +71,15 @@ const importedFrom = (isRunnerModule: RunnerModuleMatcher) => (callPath: NodePat
   return (importedName === 'test' || importedName === 'it') && parent?.isImportDeclaration() === true && isRunnerModule(parent.node.source.value);
 };
 
+// The each table written inline, or held by a `const` in the same file whose initializer is an array literal.
+const eachTable = (callPath: NodePath<t.CallExpression>, argument: t.Node | undefined): t.Node | null | undefined => {
+  const table = unwrapTypeAssertions(argument);
+  if (!t.isIdentifier(table)) return table;
+  const binding = callPath.scope.getBinding(table.name);
+  if (binding?.kind !== 'const' || !binding.path.isVariableDeclarator()) return table;
+  return unwrapTypeAssertions(binding.path.node.init);
+};
+
 const declarationFor = (modifiers: ReadonlySet<string>, todoWithoutCallback: boolean) =>
   (callPath: NodePath<t.CallExpression>, isRunnerModule: RunnerModuleMatcher): Declaration => {
     const allowed = (name: string, each: boolean): boolean => {
@@ -83,17 +96,18 @@ const declarationFor = (modifiers: ReadonlySet<string>, todoWithoutCallback: boo
     }
     if (t.isTaggedTemplateExpression(call.callee)) {
       const name = memberName(call.callee.tag);
-      return name && allowed(name, true) && importedFrom(isRunnerModule)(callPath, name) ? { name, dynamicEach: true } : {};
+      return name && allowed(name, true) && importedFrom(isRunnerModule)(callPath, name) ? { name, dynamicEach: true, ...rangeOf(call.callee.quasi) } : {};
     }
     if (!t.isCallExpression(call.callee)) return {};
     const name = memberName(call.callee.callee);
     if (!name || !allowed(name, true) || !importedFrom(isRunnerModule)(callPath, name)) return {};
-    const table = call.callee.arguments[0];
-    if (!t.isArrayExpression(table)) return { name, dynamicEach: true };
+    const argument = call.callee.arguments[0];
+    const table = eachTable(callPath, argument);
+    if (!t.isArrayExpression(table)) return { name, dynamicEach: true, ...rangeOf(argument) };
     const parameters: unknown[] = [];
     for (const entry of table.elements) {
       const parsed = staticValue(entry);
-      if (!parsed.ok) return { name, dynamicEach: true };
+      if (!parsed.ok) return { name, dynamicEach: true, ...rangeOf(argument) };
       parameters.push(parsed.value);
     }
     return { name, parameters };

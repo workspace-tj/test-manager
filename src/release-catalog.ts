@@ -13,7 +13,7 @@ const caseBase = {
 };
 const releaseCaseSchema = z.discriminatedUnion('source', [
   z.strictObject({ ...caseBase, source: z.literal('manual'), status: z.literal('active'), procedure: z.array(z.strictObject({ action: z.string(), expected: z.string() })) }),
-  z.strictObject({ ...caseBase, source: z.literal('vitest'), status: z.enum(['active', 'skip', 'todo']), parameters: z.array(z.unknown()).optional() }),
+  z.strictObject({ ...caseBase, source: z.literal('vitest'), status: z.enum(['active', 'skip', 'todo']), parameters: z.array(z.unknown()).optional(), parametersSource: z.string().optional() }),
   z.strictObject({ ...caseBase, source: z.literal('playwright'), status: z.enum(['active', 'skip']) }),
   z.strictObject({ ...caseBase, source: z.literal('storybook'), status: z.enum(['active', 'skip']) }),
 ]);
@@ -64,7 +64,7 @@ const semanticCase = (managedCase: ManagedCase): ReleaseCatalogCase => {
   };
   switch (managedCase.source) {
     case 'manual': return { ...base, source: managedCase.source, status: managedCase.status, procedure: managedCase.procedure.map((step) => ({ ...step })) };
-    case 'vitest': return { ...base, source: managedCase.source, status: managedCase.status, ...(managedCase.parameters === undefined ? {} : { parameters: [...managedCase.parameters] }) };
+    case 'vitest': return { ...base, source: managedCase.source, status: managedCase.status, ...(managedCase.parameters === undefined ? {} : { parameters: [...managedCase.parameters] }), ...(managedCase.parametersSource === undefined ? {} : { parametersSource: managedCase.parametersSource }) };
     case 'playwright': return { ...base, source: managedCase.source, status: managedCase.status };
     case 'storybook': return { ...base, source: managedCase.source, status: managedCase.status };
   }
