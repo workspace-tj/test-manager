@@ -10,11 +10,26 @@ const KindRuleSchema = z.object({
   parent: z.object({ required: z.boolean(), targetKinds: z.array(z.string().min(1)) }).strict(),
 }).strict();
 
+const ConditionValueSchema = z.union([z.string(), z.number().int()]);
+
+// `equals` names one value; `in` names several, any of which makes the field required.
+const RequiredWhenSchema = z.union([
+  z.object({ field: z.string().min(1), equals: ConditionValueSchema }).strict(),
+  z.object({
+    field: z.string().min(1),
+    in: z.array(ConditionValueSchema).min(1).refine((values) => new Set(values).size === values.length, 'must contain unique values').meta({ uniqueItems: true }),
+  }).strict(),
+]).meta({ id: 'RequiredWhen' });
+
+const conditionValues = (condition: z.infer<typeof RequiredWhenSchema>): ReadonlyArray<string | number> => 'in' in condition ? condition.in : [condition.equals];
+
+const conditionValuePath = (condition: z.infer<typeof RequiredWhenSchema>, index: number): ReadonlyArray<string | number> => 'in' in condition ? ['in', index] : ['equals'];
+
 const RequirednessShape = {
   label: z.string().min(1).optional(),
   required: z.boolean(),
   placement: z.enum(['classification', 'detail']),
-  requiredWhen: z.object({ field: z.string().min(1), equals: z.union([z.string(), z.number().int()]) }).strict().optional(),
+  requiredWhen: RequiredWhenSchema.optional(),
 } as const;
 
 const ValuesSchema = z.record(z.string(), z.object({ label: z.string().min(1).optional(), description: z.string().min(1) }).strict())
@@ -67,27 +82,30 @@ const validateRuleRelationships = (rules: z.infer<typeof RulesShape>, context: z
   const refs = rules.case.fields.refs;
   if (refs && refs.type !== 'reference-list') context.addIssue({ code: 'custom', path: ['case', 'fields', 'refs'], message: 'refs must be a reference-list field' });
   if (refs?.placement === 'detail') context.addIssue({ code: 'custom', path: ['case', 'fields', 'refs', 'placement'], message: 'refs must be a classification field' });
+  const layers = [...new Set(rules.discovery.sources.map((source) => source.layer))];
   for (const [name, field] of Object.entries(rules.case.fields)) {
-    if (field.requiredWhen?.field === 'source') {
-      if (!(caseSources as ReadonlyArray<unknown>).includes(field.requiredWhen.equals)) context.addIssue({ code: 'custom', path: ['case', 'fields', name, 'requiredWhen', 'equals'], message: `source must be one of ${caseSources.join(', ')}` });
-    } else if (field.requiredWhen?.field === 'layer') {
-      const layers = [...new Set(rules.discovery.sources.map((source) => source.layer))];
-      if (!(layers as ReadonlyArray<unknown>).includes(field.requiredWhen.equals)) context.addIssue({ code: 'custom', path: ['case', 'fields', name, 'requiredWhen', 'equals'], message: `layer must be one of ${layers.join(', ')}` });
-    } else if (field.requiredWhen) {
-      const conditionField = rules.case.fields[field.requiredWhen.field];
-      if (conditionField === undefined) {
-        context.addIssue({ code: 'custom', path: ['case', 'fields', name, 'requiredWhen', 'field'], message: `unknown condition field ${field.requiredWhen.field}` });
-      } else {
-        const equals = field.requiredWhen.equals;
-        const canMatch = conditionField.type === 'enum'
-          ? typeof equals === 'string' && equals in conditionField.values
-          : conditionField.type === 'integer-enum'
-            ? typeof equals === 'number' && Number.isInteger(equals) && String(equals) in conditionField.values
-            : conditionField.type === 'text' || conditionField.type === 'reference'
-              ? typeof equals === 'string'
-              : false;
-        if (!canMatch) context.addIssue({ code: 'custom', path: ['case', 'fields', name, 'requiredWhen', 'equals'], message: `value cannot match ${field.requiredWhen.field}` });
-      }
+    const condition = field.requiredWhen;
+    const conditionField = condition && condition.field !== 'source' && condition.field !== 'layer' ? rules.case.fields[condition.field] : undefined;
+    if (condition && condition.field !== 'source' && condition.field !== 'layer' && conditionField === undefined) {
+      context.addIssue({ code: 'custom', path: ['case', 'fields', name, 'requiredWhen', 'field'], message: `unknown condition field ${condition.field}` });
+    } else if (condition) {
+      conditionValues(condition).forEach((value, index) => {
+        const path = ['case', 'fields', name, 'requiredWhen', ...conditionValuePath(condition, index)];
+        if (condition.field === 'source') {
+          if (!(caseSources as ReadonlyArray<unknown>).includes(value)) context.addIssue({ code: 'custom', path, message: `source must be one of ${caseSources.join(', ')}` });
+        } else if (condition.field === 'layer') {
+          if (!(layers as ReadonlyArray<unknown>).includes(value)) context.addIssue({ code: 'custom', path, message: `layer must be one of ${layers.join(', ')}` });
+        } else if (conditionField) {
+          const canMatch = conditionField.type === 'enum'
+            ? typeof value === 'string' && value in conditionField.values
+            : conditionField.type === 'integer-enum'
+              ? typeof value === 'number' && Number.isInteger(value) && String(value) in conditionField.values
+              : conditionField.type === 'text' || conditionField.type === 'reference'
+                ? typeof value === 'string'
+                : false;
+          if (!canMatch) context.addIssue({ code: 'custom', path, message: `value cannot match ${condition.field}` });
+        }
+      });
     }
     if (field.type === 'reference' || field.type === 'reference-list') {
       for (const targetKind of field.targetKinds) if (rules.documents.kinds[targetKind] === undefined) {
@@ -125,7 +143,7 @@ const normalizeEnumValues = (
 const normalizeFieldRule = (field: z.infer<typeof FieldRuleSchema>): FieldRule => {
   const requiredness = field.required
     ? { required: true } as const
-    : { required: false, ...(field.requiredWhen ? { requiredWhen: field.requiredWhen } : {}) } as const;
+    : { required: false, ...(field.requiredWhen ? { requiredWhen: { field: field.requiredWhen.field, in: conditionValues(field.requiredWhen) } } : {}) } as const;
   const presentation = field.label === undefined ? {} : { label: field.label };
   switch (field.type) {
     case 'reference': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, targetKinds: field.targetKinds };

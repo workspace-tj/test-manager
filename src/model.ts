@@ -16,7 +16,7 @@ export type KindRule = Readonly<{
 
 type FieldRequiredness = Readonly<
   | { required: true; requiredWhen?: undefined }
-  | { required: false; requiredWhen?: Readonly<{ field: string; equals: string | number }> | undefined }
+  | { required: false; requiredWhen?: Readonly<{ field: string; in: ReadonlyArray<string | number> }> | undefined }
 >;
 
 export type FieldRule = FieldRequiredness & Readonly<

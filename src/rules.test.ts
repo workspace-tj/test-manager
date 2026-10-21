@@ -43,7 +43,7 @@ describe('project-defined vocabulary', () => {
       {
         belongsTo: { required: true, placement: 'classification', type: 'reference', targetKinds: ['area'] },
         role: { required: true, placement: 'classification', type: 'enum', values: { product: { description: 'product' } } },
-        refs: { required: false, placement: 'classification', requiredWhen: { field: 'role', equals: 'product' }, type: 'reference-list', targetKinds: ['area'] },
+        refs: { required: false, placement: 'classification', requiredWhen: { field: 'role', in: ['product'] }, type: 'reference-list', targetKinds: ['area'] },
       },
       [{ id: documentIdSchema(/.*/u).parse('area'), kind: 'area', title: 'Area', body: '', location: { file: 'area.md', line: 1, column: 1 } }],
       'case.ts',
@@ -55,7 +55,7 @@ describe('project-defined vocabulary', () => {
   it('supports requiredWhen conditioned on the case source', () => {
     const rules = {
       belongsTo: { required: true as const, placement: 'classification' as const, type: 'reference' as const, targetKinds: ['area'] },
-      device: { required: false as const, placement: 'classification' as const, requiredWhen: { field: 'source', equals: 'playwright' }, type: 'text' as const },
+      device: { required: false as const, placement: 'classification' as const, requiredWhen: { field: 'source', in: ['playwright'] }, type: 'text' as const },
     };
     const documents = [{ id: documentIdSchema(/.*/u).parse('area'), kind: 'area', title: 'Area', body: '', location: { file: 'area.md', line: 1, column: 1 } }];
     const diagnostics = validateCaseFields({ belongsTo: 'area' }, rules, documents, 'case.ts', { source: 'playwright', layer: 'e2e' });
@@ -87,6 +87,40 @@ describe('project-defined vocabulary', () => {
     expect(reasons({ belongsTo: 'missing', refs: ['billing'] })).toEqual(['TM126 reference missing does not exist']);
     const featureOnly = { ...rules, refs: { ...rules.refs, targetKinds: ['feature'] } };
     expect(validateCaseFields({ belongsTo: 'invoice-issue', refs: ['billing'] }, featureOnly, documents, 'case.ts').map((item) => item.code)).toEqual(['TM127']);
+  });
+
+  it('requires a field when the condition matches any value listed in requiredWhen.in', () => {
+    const rules = {
+      belongsTo: { required: true as const, placement: 'classification' as const, type: 'reference' as const, targetKinds: ['area'] },
+      characteristic: { required: false as const, placement: 'classification' as const, requiredWhen: { field: 'layer', in: ['e2e', 'integration'] }, type: 'text' as const },
+    };
+    const documents = [{ id: documentIdSchema(/.*/u).parse('area'), kind: 'area', title: 'Area', body: '', location: { file: 'area.md', line: 1, column: 1 } }];
+    const integration = validateCaseFields({ belongsTo: 'area' }, rules, documents, 'case.ts', { source: 'vitest', layer: 'integration' });
+    expect(integration.map((item) => item.code)).toEqual(['TM121']);
+    expect(integration[0]?.reason).toContain('required when layer is one of "e2e", "integration"');
+    expect(validateCaseFields({ belongsTo: 'area' }, rules, documents, 'case.ts', { source: 'playwright', layer: 'e2e' }).map((item) => item.code)).toEqual(['TM121']);
+    expect(validateCaseFields({ belongsTo: 'area' }, rules, documents, 'case.ts', { source: 'vitest', layer: 'unit' })).toEqual([]);
+  });
+
+  it('accepts requiredWhen.in from configuration and reports each value that cannot match', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-rule-condition-in-'));
+    const source = await readFile(path.resolve('fixtures/valid/test-manager.yaml'), 'utf8');
+    const target = 'required: false, placement: classification, type: reference-list';
+    await writeFile(path.join(root, 'valid.yaml'), source.replace(target, 'required: false, placement: classification, requiredWhen: { field: layer, in: [e2e, unit] }, type: reference-list'), 'utf8');
+    const valid = await loadRules(path.join(root, 'valid.yaml'));
+    expect(valid.diagnostics).toEqual([]);
+    expect(valid.rules?.case.fields.refs?.requiredWhen).toEqual({ field: 'layer', in: ['e2e', 'unit'] });
+    await writeFile(path.join(root, 'invalid.yaml'), source.replace(target, 'required: false, placement: classification, requiredWhen: { field: layer, in: [e2e, integration] }, type: reference-list'), 'utf8');
+    const invalid = await loadRules(path.join(root, 'invalid.yaml'));
+    expect(invalid.diagnostics.map((item) => item.subject)).toEqual(['case.fields.refs.requiredWhen.in.1']);
+    for (const [name, condition] of [['both', '{ field: layer, equals: e2e, in: [unit] }'], ['empty', '{ field: layer, in: [] }'], ['duplicate', '{ field: layer, in: [e2e, e2e] }']] as const) {
+      await writeFile(path.join(root, `${name}.yaml`), source.replace(target, `required: false, placement: classification, requiredWhen: ${condition}, type: reference-list`), 'utf8');
+      const rejected = await loadRules(path.join(root, `${name}.yaml`));
+      expect(rejected.rules).toBeUndefined();
+      expect(rejected.diagnostics.some((item) => item.subject.startsWith('case.fields.refs.requiredWhen'))).toBe(true);
+    }
+    await writeFile(path.join(root, 'integer.yaml'), source.replace(target, 'required: false, placement: classification, requiredWhen: { field: impact, in: [1, "2"] }, type: reference-list'), 'utf8');
+    expect((await loadRules(path.join(root, 'integer.yaml'))).diagnostics.map((item) => item.subject)).toEqual(['case.fields.refs.requiredWhen.in.1']);
   });
 
   it('distinguishes missing references from disallowed target kinds', () => {
