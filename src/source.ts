@@ -103,7 +103,9 @@ const parseSource = (source: string, file: string): Readonly<{ ast?: t.File; dia
 const runnerModuleMatcher = (defaultModule: string, configured: ReadonlyArray<string>, file: string): RunnerModuleMatcher => (specifier) => {
   if (specifier === defaultModule || configured.includes(specifier)) return true;
   if (!specifier.startsWith('.')) return false;
-  const resolved = path.posix.join(path.posix.dirname(file.split(path.sep).join('/')), specifier).replace(/\.[cm]?[jt]sx?$/u, '');
+  const resolved = path.posix.join(path.posix.dirname(file.split(path.sep).join('/')), specifier.replace(/[?#].*$/u, ''))
+    .replace(/\.[cm]?[jt]sx?$/u, '')
+    .replace(/\/index$/u, '');
   return configured.some((pattern) => path.matchesGlob(resolved, pattern));
 };
 

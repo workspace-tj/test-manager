@@ -356,6 +356,8 @@ runners:
       - "apps/**/__e2e__/fixtures"       # 相対 import は、プロジェクトからのパス（拡張子なし）に直して glob で照合する
 ```
 
+相対 import は、拡張子・末尾の `/index`・`?` 以降を除いて照合します。tsconfig の paths などの別名は、import に書いた文字列のまま完全一致で書きます。
+
 ### Storybook
 
 Story の明示的な `name` の先頭へケース ID を入れます。
