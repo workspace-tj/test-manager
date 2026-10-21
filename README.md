@@ -211,7 +211,7 @@ case:
 
 プロジェクトで各ケースに記録する項目を定義します。フィールド名は固定されていませんが、`belongsTo` は必須の参照項目です。
 
-利用できる型は `reference`、`reference-list`、`enum`、`integer-enum`、`text`、`text-list` です。`required`、条件付き必須の `requiredWhen`、`minItems`、`uniqueItems` も設定できます。`requiredWhen` の `field` には他のcase項目のほか `source` と `layer` を指定できます。`equals: playwright` のようにケースの記述方式（`manual`、`vitest`、`playwright`、`storybook`）で、`equals: e2e` のように `discovery.sources` で定義したテスト層で必須を切り替えられます。安定した英語のfield keyやenum valueを変えずに、任意の`label`で画面上の日本語表示名を指定できます。
+利用できる型は `reference`、`reference-list`、`enum`、`integer-enum`、`text`、`text-list` です。`required`、条件付き必須の `requiredWhen`、`minItems`、`uniqueItems` も設定できます。`requiredWhen` の `field` には他のcase項目のほか `source` と `layer` を指定できます。`equals: playwright` のようにケースの記述方式（`manual`、`vitest`、`playwright`、`storybook`）で、`equals: e2e` のように `discovery.sources` で定義したテスト層で必須を切り替えられます。複数の値のどれかで必須にする場合は、`equals` の代わりに `in: [e2e, integration]` のように列挙します。安定した英語のfield keyやenum valueを変えずに、任意の`label`で画面上の日本語表示名を指定できます。
 
 `placement` は記述場所とサイト上での扱いを決めます。
 

@@ -156,30 +156,7 @@
                     ]
                   },
                   "requiredWhen": {
-                    "type": "object",
-                    "properties": {
-                      "field": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "equals": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          }
-                        ]
-                      }
-                    },
-                    "required": [
-                      "field",
-                      "equals"
-                    ],
-                    "additionalProperties": false
+                    "$ref": "#/$defs/RequiredWhen"
                   },
                   "type": {
                     "type": "string",
@@ -220,30 +197,7 @@
                     ]
                   },
                   "requiredWhen": {
-                    "type": "object",
-                    "properties": {
-                      "field": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "equals": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          }
-                        ]
-                      }
-                    },
-                    "required": [
-                      "field",
-                      "equals"
-                    ],
-                    "additionalProperties": false
+                    "$ref": "#/$defs/RequiredWhen"
                   },
                   "type": {
                     "type": "string",
@@ -292,30 +246,7 @@
                     ]
                   },
                   "requiredWhen": {
-                    "type": "object",
-                    "properties": {
-                      "field": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "equals": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          }
-                        ]
-                      }
-                    },
-                    "required": [
-                      "field",
-                      "equals"
-                    ],
-                    "additionalProperties": false
+                    "$ref": "#/$defs/RequiredWhen"
                   },
                   "type": {
                     "type": "string",
@@ -374,30 +305,7 @@
                     ]
                   },
                   "requiredWhen": {
-                    "type": "object",
-                    "properties": {
-                      "field": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "equals": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          }
-                        ]
-                      }
-                    },
-                    "required": [
-                      "field",
-                      "equals"
-                    ],
-                    "additionalProperties": false
+                    "$ref": "#/$defs/RequiredWhen"
                   },
                   "type": {
                     "type": "string",
@@ -453,30 +361,7 @@
                     ]
                   },
                   "requiredWhen": {
-                    "type": "object",
-                    "properties": {
-                      "field": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "equals": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          }
-                        ]
-                      }
-                    },
-                    "required": [
-                      "field",
-                      "equals"
-                    ],
-                    "additionalProperties": false
+                    "$ref": "#/$defs/RequiredWhen"
                   },
                   "type": {
                     "type": "string",
@@ -508,30 +393,7 @@
                     ]
                   },
                   "requiredWhen": {
-                    "type": "object",
-                    "properties": {
-                      "field": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "equals": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          }
-                        ]
-                      }
-                    },
-                    "required": [
-                      "field",
-                      "equals"
-                    ],
-                    "additionalProperties": false
+                    "$ref": "#/$defs/RequiredWhen"
                   },
                   "type": {
                     "type": "string",
@@ -570,5 +432,68 @@
     "documents",
     "case"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "RequiredWhen": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string",
+              "minLength": 1
+            },
+            "equals": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              ]
+            }
+          },
+          "required": [
+            "field",
+            "equals"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "field": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  }
+                ]
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "field",
+            "in"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
 }
