@@ -594,6 +594,18 @@ describe('project catalog', () => {
     expect(empty.hidden).toBe(false);
   });
 
+  it('folds documents with children in the document list and leaves leaves as plain rows', async () => {
+    const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
+    if (!result.ok) throw new Error('fixture catalog must be valid');
+    const page = (await renderSite(result.catalog)).get('documents/index.html') ?? '';
+    const parents = new Set(result.catalog.documents.flatMap((document) => document.parent ? [document.parent] : []));
+    for (const document of result.catalog.documents) {
+      const link = `<a href="../documents/${document.id}.html">`;
+      expect(page).toContain(parents.has(document.id) ? `<details><summary>${link}` : `<li><div>${link}`);
+    }
+    expect(page).not.toContain('<details open');
+  });
+
   it('shows every feature of a matching domain on the top page, and only matching features otherwise', async () => {
     const files = await renderSite((await checkProject(path.join(fixture, 'test-manager.yaml')) as { catalog: Parameters<typeof renderSite>[0] }).catalog);
     const listeners: Record<string, () => void> = {};
@@ -601,14 +613,30 @@ describe('project catalog', () => {
     const feature = (search: string) => ({ hidden: false, dataset: { search } });
     const ordersFeatures = [feature('注文取消'), feature('返品')];
     const catalogFeatures = [feature('価格計算')];
-    const domain = (search: string, features: ReturnType<typeof feature>[]) => ({ hidden: false, dataset: { search }, querySelectorAll: () => features });
+    const toggleListeners = new Map<object, () => void>();
+    const domain = (search: string, features: ReturnType<typeof feature>[]) => { const toggle = { expanded: '', setAttribute(_name: string, value: string) { this.expanded = value; }, addEventListener(_event: string, listener: () => void) { toggleListeners.set(toggle, listener); } }; return { hidden: false, toggle, dataset: { search } as Record<string, string>, querySelector: () => toggle, querySelectorAll: () => features }; };
     const domains = [domain('受注 orders', ordersFeatures), domain('商品カタログ catalog', catalogFeatures)];
+    const lone = { hidden: false, dataset: { search: '単独' } as Record<string, string>, querySelector: () => null, querySelectorAll: () => [] };
     const empty = { hidden: true };
-    runInNewContext(files.get('assets/overview.js') ?? '', { document: { querySelector: (selector: string) => selector === '#search' ? search : empty, querySelectorAll: () => domains } });
+    const expandAll = { textContent: '', addEventListener(_event: string, listener: () => void) { listeners.expandAll = listener; } };
+    runInNewContext(files.get('assets/overview.js') ?? '', { document: { querySelector: (selector: string) => selector === '#search' ? search : selector === '#expand-all' ? expandAll : empty, querySelectorAll: () => [...domains, lone] } });
+    expect(domains.map((item) => 'collapsed' in item.dataset)).toEqual([true, true]);
+    expect(expandAll.textContent).toBe('すべて開く');
+    toggleListeners.get(domains[0]!.toggle)?.();
+    toggleListeners.get(domains[1]!.toggle)?.();
+    expect(expandAll.textContent).toBe('すべて閉じる');
+    toggleListeners.get(domains[1]!.toggle)?.();
+    expect(domains.map((item) => 'collapsed' in item.dataset)).toEqual([false, true]);
+    expect(domains[0]!.toggle.expanded).toBe('true');
+    listeners.expandAll?.();
+    expect(domains.map((item) => 'collapsed' in item.dataset)).toEqual([false, false]);
+    expect(expandAll.textContent).toBe('すべて閉じる');
+    listeners.expandAll?.();
     search.value = '受注';
     listeners.input?.();
     expect(domains.map((item) => item.hidden)).toEqual([false, true]);
     expect(ordersFeatures.map((item) => item.hidden)).toEqual([false, false]);
+    expect(domains.map((item) => 'collapsed' in item.dataset)).toEqual([false, false]);
     search.value = '返品';
     listeners.input?.();
     expect(ordersFeatures.map((item) => item.hidden)).toEqual([true, false]);
