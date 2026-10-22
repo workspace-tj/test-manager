@@ -257,7 +257,32 @@ case:
 
 プロジェクトで各ケースに記録する項目を定義します。フィールド名は固定されていませんが、`belongsTo` は必須の参照項目です。
 
-利用できる型は `reference`、`reference-list`、`enum`、`integer-enum`、`text`、`text-list` です。`required`、条件付き必須の `requiredWhen`、`minItems`、`uniqueItems` も設定できます。`requiredWhen` の `field` には他のcase項目のほか `source` と `layer` を指定できます。`equals: playwright` のようにケースの記述方式（`manual`、`vitest`、`playwright`、`storybook`）で、`equals: e2e` のように `discovery.sources` で定義したテスト層で必須を切り替えられます。複数の値のどれかで必須にする場合は、`equals` の代わりに `in: [e2e, integration]` のように列挙します。`requiredWhen` を書いた項目では `required` を省略でき、条件に当たらないケースでは任意になります。それ以外の項目には `required` が必要です。安定した英語のfield keyやenum valueを変えずに、任意の`label`で画面上の日本語表示名を指定できます。
+利用できる型は `reference`、`reference-list`、`enum`、`integer-enum`、`text`、`text-list`、`keyed-text-list` です。
+
+`keyed-text-list` は、種類付きの短い文の並びです。各項目を `<種類>: <文>` の1組で書き、種類は `enum` と同じく `values` に定義します。直すべき点のように、種類で拾い出したい覚え書きに使います。種類のない文字列、2組以上の項目、空の文は TM135、設定にない種類は TM123 で診断します。ケースのページでは種類の表示名を付けて出し、ケース検索では種類で絞り込めます（どれかの項目がその種類を持つケースが当たります）。`minItems` は指定できますが、`uniqueItems` はありません。リリース差分と PR コメントでは「種類の表示名: 文」の形で示します。
+
+```yaml
+case:
+  fields:
+    todo:
+      label: 直すべき点
+      type: keyed-text-list
+      placement: detail
+      required: false
+      values:
+        spec: { label: 仕様の確認, description: 仕様として正しいか確かめる }
+        bug: { label: 不具合, description: 今の不具合をそのまま確かめている }
+```
+
+```ts
+/**
+ * @case-doc
+ * todo:
+ *   - spec: "40歳到達月から引いているが、文書は翌月から"
+ */
+```
+
+`required`、条件付き必須の `requiredWhen`、`minItems`、`uniqueItems` も設定できます。`requiredWhen` の `field` には他のcase項目のほか `source` と `layer` を指定できます。`equals: playwright` のようにケースの記述方式（`manual`、`vitest`、`playwright`、`storybook`）で、`equals: e2e` のように `discovery.sources` で定義したテスト層で必須を切り替えられます。複数の値のどれかで必須にする場合は、`equals` の代わりに `in: [e2e, integration]` のように列挙します。`requiredWhen` を書いた項目では `required` を省略でき、条件に当たらないケースでは任意になります。それ以外の項目には `required` が必要です。安定した英語のfield keyやenum valueを変えずに、任意の`label`で画面上の日本語表示名を指定できます。
 
 `refs` に、そのケースの `belongsTo` と同じ文書や、その祖先（親の文書をたどったもの）を書くと TM128 で診断します。`belongsTo` で既に決まっている関係を二重に書かないためです。存在しない文書への参照と同じく、診断されたケースはカタログに含めません。`refs` 以外にプロジェクトが定義した `reference-list` の項目は、意味がプロジェクトごとに違うため対象にしません。
 

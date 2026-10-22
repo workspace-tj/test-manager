@@ -73,6 +73,18 @@ describe('pull request comment', () => {
     expect(renderPrComment(longDiff.view)).toContain(`reason: x → ${'あ'.repeat(39)}𠮷…`);
   });
 
+  it('names keyed notes by their kind label on each side of a change', async () => {
+    const catalog = await fixture();
+    const [first] = catalog.cases;
+    if (!first) throw new Error('fixture must contain a case');
+    const labelled = { ...catalog, rules: { ...catalog.rules, case: { fields: { ...catalog.rules.case.fields, todo: { required: false as const, placement: 'detail' as const, type: 'keyed-text-list' as const, label: '直すべき点', values: { spec: { label: '仕様の確認', description: 'a' }, split: { label: '分けたい', description: 'b' } } } } } } };
+    const base = createReleaseCatalogSnapshot({ ...labelled, cases: [{ ...first, details: { todo: [{ split: '件数も見ている' }] } } as typeof first] }, '6e2b11a');
+    const head = createReleaseCatalogSnapshot({ ...labelled, cases: [{ ...first, details: { todo: [{ spec: '端数の向き' }] } } as typeof first] }, '7f3a12c');
+    const diff = buildReleaseDiff({ production: base, staging: { snapshot: head } });
+    if (!diff.ok) throw new Error(diff.problems.join('; '));
+    expect(renderPrComment(diff.view)).toContain('直すべき点: 分けたい: 件数も見ている → 仕様の確認: 端数の向き');
+  });
+
   it('stays under the GitHub comment limit by omitting the remaining rows', async () => {
     const catalog = await fixture();
     const template = catalog.cases[0];

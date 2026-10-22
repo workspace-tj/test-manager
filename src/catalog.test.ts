@@ -148,6 +148,22 @@ describe('project catalog', () => {
     expect(missing.some((item) => item.location.file.endsWith('.spec.ts'))).toBe(true);
   });
 
+  it('shows keyed notes with their labels on case pages and lets the case search filter by key', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-keyed-notes-'));
+    await cp(fixture, root, { recursive: true });
+    const config = path.join(root, 'test-manager.yaml');
+    await writeFile(config, (await readFile(config, 'utf8')).replace('    reason: {', '    todo: { required: false, placement: detail, type: keyed-text-list, label: 直すべき点, values: { spec: { label: 仕様の確認, description: 仕様を確かめる }, duplicate: { label: 重複, description: 同じことを確かめている } } }\n    reason: {'), 'utf8');
+    const manual = path.join(root, 'knowledge/order-cancellation/operator.manual.yaml');
+    await writeFile(manual, `${await readFile(manual, 'utf8')}todo:\n  - spec: "出荷済みの判定に返品中を含めるか確かめる"\n`, 'utf8');
+    const result = await checkProject(config);
+    if (!result.ok) throw new Error(JSON.stringify(result.diagnostics));
+    const site = await renderSite(result.catalog);
+    expect(site.get('cases/CASE-101.html')).toContain('<li><span class="keyed-label">仕様の確認</span>出荷済みの判定に返品中を含めるか確かめる</li>');
+    const search = site.get('cases/index.html') ?? '';
+    expect(search).toContain('<span>直すべき点</span><select id="todo-filter" data-filter-key="todo"><option value="">すべて</option><option value="spec">仕様の確認</option></select>');
+    expect(site.get('cases/index-data.js')).toContain('"todo":["spec"]');
+  });
+
   it('renders configured breakdown tables that count running cases and show stopped ones apart', async () => {
     const plain = await checkProject(path.join(fixture, 'test-manager.yaml'));
     if (!plain.ok) throw new Error('fixture catalog must be valid');

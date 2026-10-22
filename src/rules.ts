@@ -52,6 +52,7 @@ const FieldRuleSchema = z.discriminatedUnion('type', [
   z.object({ ...RequirednessShape, type: z.literal('integer-enum'), values: ValuesSchema }).strict(),
   z.object({ ...RequirednessShape, type: z.literal('text') }).strict(),
   z.object({ ...RequirednessShape, type: z.literal('text-list'), minItems: z.number().int().nonnegative().optional(), uniqueItems: z.boolean().optional() }).strict(),
+  z.object({ ...RequirednessShape, type: z.literal('keyed-text-list'), values: ValuesSchema, minItems: z.number().int().nonnegative().optional() }).strict(),
 ]).superRefine((field, context) => {
   if (field.required && field.requiredWhen) context.addIssue({ code: 'custom', message: 'required and requiredWhen are mutually exclusive' });
   if (field.required === undefined && !field.requiredWhen) context.addIssue({ code: 'custom', path: ['required'], message: 'required must be set unless requiredWhen is given' });
@@ -188,6 +189,7 @@ const normalizeFieldRule = (field: z.infer<typeof FieldRuleSchema>): FieldRule =
     case 'integer-enum': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, values: normalizeEnumValues(field.values) };
     case 'text': return { ...requiredness, ...presentation, placement: field.placement, type: field.type };
     case 'text-list': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, ...(field.minItems !== undefined ? { minItems: field.minItems } : {}), ...(field.uniqueItems !== undefined ? { uniqueItems: field.uniqueItems } : {}) };
+    case 'keyed-text-list': return { ...requiredness, ...presentation, placement: field.placement, type: field.type, values: normalizeEnumValues(field.values), ...(field.minItems !== undefined ? { minItems: field.minItems } : {}) };
   }
 };
 

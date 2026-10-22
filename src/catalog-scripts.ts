@@ -1,6 +1,8 @@
 // Browser scripts for the catalog pages. They run as plain scripts (no modules) so the site also works from file://.
 
 const escapeFunction = "const escapeHtml=value=>String(value).replace(/[&<>\"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'})[character]);";
+// A list value (keyed notes) matches when it contains the chosen value.
+const matchFunction = "const matchesFilter=(value,wanted)=>Array.isArray(value)?value.map(String).includes(wanted):String(value??'')===wanted;";
 const normalizeFunction = "const normalize=value=>String(value).normalize('NFKC').toLocaleLowerCase('ja');const termsOf=value=>normalize(value).trim().split(/\\s+/u).filter(Boolean);";
 
 // Top page: a domain stays visible when its own text matches, and then shows all its features; otherwise only matching features.
@@ -25,7 +27,7 @@ search?.addEventListener('input',apply);apply();})();
 
 // Case search: every case lives in index-data.js; only the first matches are drawn, so thousands of cases stay responsive.
 // The conditions are kept in the URL, so a feature page (or a person) can link to an already narrowed list.
-export const catalogSearchScript = `(()=>{${escapeFunction}${normalizeFunction}
+export const catalogSearchScript = `(()=>{${escapeFunction}${normalizeFunction}${matchFunction}
 const cases=window.testManagerCases??[];const features=window.testManagerFeatures??{};const pageSize=200;
 const search=document.querySelector('#search');const filters=[...document.querySelectorAll('[data-filter-key]')];
 const domainControls=[...document.querySelectorAll('[data-domain-filter]')];const summary=document.querySelector('#result-summary');
@@ -44,7 +46,7 @@ try{history.replaceState(null,'',query?'?'+query:location.pathname)}catch{}};
 const row=item=>'<li data-case-row data-domain="'+escapeHtml(item.domain)+'" data-filters="'+escapeHtml(JSON.stringify(item.filters))+'"><div><small>'+escapeHtml(item.id)+' · '+escapeHtml(item.layer)+' · '+escapeHtml(item.source)+' · '+escapeHtml(item.status)+'</small><a href="'+escapeHtml(item.href)+'">'+escapeHtml(item.title)+'</a></div><span>'+escapeHtml(item.belongsToTitle)+'</span></li>';
 const render=()=>{const terms=termsOf(search?.value??'');const matches=[];
 cases.forEach((item,position)=>{if(domain&&item.domain!==domain)return;if(feature&&!item.ancestors.includes(feature))return;
-if(filters.some(control=>control.value&&String(item.filters[control.dataset.filterKey]??'')!==control.value))return;
+if(filters.some(control=>control.value&&!matchesFilter(item.filters[control.dataset.filterKey],control.value)))return;
 if(!terms.every(term=>index[position].includes(term)))return;matches.push(item)});
 const totals=new Map();for(const item of matches)totals.set(item.domain,(totals.get(item.domain)??0)+1);
 const groups=[];for(const item of matches.slice(0,limit)){let group=groups.at(-1);if(!group||group.domain!==item.domain){group={domain:item.domain,title:item.domainTitle,items:[]};groups.push(group)}group.items.push(item)}
@@ -63,14 +65,14 @@ render();})();
 `;
 
 // Feature pages: narrow the cases under the headings in place; headings show their visible count and hide when empty.
-export const catalogDocumentScript = `(()=>{${normalizeFunction}
+export const catalogDocumentScript = `(()=>{${normalizeFunction}${matchFunction}
 const root=document.querySelector('[data-case-filter-root]');if(!root)return;
 const search=root.querySelector('#case-filter-search');const filters=[...root.querySelectorAll('[data-filter-key]')];
 const rows=[...root.querySelectorAll('[data-case-row]')].map(row=>({row,text:normalize(row.dataset.search??''),values:JSON.parse(row.dataset.filters??'{}')}));
 const groups=[...root.querySelectorAll('[data-case-group]')].reverse();const summary=root.querySelector('#case-filter-summary');const empty=root.querySelector('#case-filter-empty');const link=root.querySelector('#open-in-search');
 const base=link?.getAttribute('href')??'';
 const apply=()=>{const terms=termsOf(search?.value??'');let visible=0;
-for(const item of rows){item.row.hidden=!(terms.every(term=>item.text.includes(term))&&!filters.some(control=>control.value&&String(item.values[control.dataset.filterKey]??'')!==control.value));if(!item.row.hidden)visible+=1}
+for(const item of rows){item.row.hidden=!(terms.every(term=>item.text.includes(term))&&!filters.some(control=>control.value&&!matchesFilter(item.values[control.dataset.filterKey],control.value)));if(!item.row.hidden)visible+=1}
 for(const group of groups){const count=group.querySelectorAll('[data-case-row]:not([hidden])').length;group.hidden=count===0;const label=group.querySelector('[data-group-count]');if(label)label.textContent=count+'件'}
 if(empty)empty.hidden=visible!==0;if(summary)summary.textContent=visible===rows.length?rows.length+'ケース':visible+' / '+rows.length+'ケース';
 if(link){const params=new URLSearchParams(base.split('?')[1]??'');if(search?.value)params.set('q',search.value);for(const control of filters)if(control.value)params.set(control.dataset.filterKey,control.value);link.setAttribute('href',base.split('?')[0]+'?'+params.toString())}};

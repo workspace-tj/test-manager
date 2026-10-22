@@ -45,6 +45,12 @@ export type FieldRule = FieldRequiredness & Readonly<
     minItems?: number | undefined;
     uniqueItems?: boolean | undefined;
   }
+  | {
+    // Each item is a one-entry map `<key>: <text>`, the key naming the kind of the note (e.g. a todo's kind).
+    type: 'keyed-text-list';
+    values: Readonly<Record<string, Readonly<{ label?: string; description: string }>>>;
+    minItems?: number | undefined;
+  }
 > & Readonly<{ label?: string; placement: 'classification' | 'detail' }>;
 
 export const sourceKinds = ['vitest', 'playwright', 'storybook'] as const;
