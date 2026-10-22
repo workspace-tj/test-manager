@@ -6,13 +6,20 @@ const normalizeFunction = "const normalize=value=>String(value).normalize('NFKC'
 // Top page: a domain stays visible when its own text matches, and then shows all its features; otherwise only matching features.
 export const catalogOverviewScript = `(()=>{${normalizeFunction}
 const search=document.querySelector('#search');
-const domains=[...document.querySelectorAll('[data-domain-overview]')].map(element=>({element,text:normalize(element.dataset.search??''),features:[...element.querySelectorAll('[data-feature-row]')].map(row=>({row,text:normalize(row.dataset.search??'')}))}));
-const empty=document.querySelector('#empty-overview');
+const domains=[...document.querySelectorAll('[data-domain-overview]')].map(element=>({element,toggle:element.querySelector('[data-domain-toggle]'),open:false,text:normalize(element.dataset.search??''),features:[...element.querySelectorAll('[data-feature-row]')].map(row=>({row,text:normalize(row.dataset.search??'')}))}));
+const empty=document.querySelector('#empty-overview');const expandAll=document.querySelector('#expand-all');
+// Only domains with features can fold; the buttons are hidden in the HTML so a page without scripts shows no dead controls.
+const foldable=domains.filter(domain=>domain.toggle);for(const domain of foldable)domain.toggle.hidden=false;if(expandAll)expandAll.hidden=foldable.length===0;
+// Domains start folded; while a search term is typed, matching features show regardless of folding.
 const apply=()=>{const terms=termsOf(search?.value??'');let visible=0;
 for(const domain of domains){const domainMatches=terms.every(term=>domain.text.includes(term));let features=0;
 for(const feature of domain.features){feature.row.hidden=!(domainMatches||terms.every(term=>feature.text.includes(term)));if(!feature.row.hidden)features+=1}
-domain.element.hidden=!(domainMatches||features>0);if(!domain.element.hidden)visible+=1}
-if(empty)empty.hidden=visible!==0};
+domain.element.hidden=!(domainMatches||features>0);if(!domain.element.hidden)visible+=1;
+const open=domain.open||terms.length>0;if(open)delete domain.element.dataset.collapsed;else domain.element.dataset.collapsed='';
+domain.toggle?.setAttribute('aria-expanded',String(open));if(domain.toggle)domain.toggle.disabled=terms.length>0}
+if(empty)empty.hidden=visible!==0;if(expandAll){expandAll.textContent=foldable.every(domain=>domain.open)?'すべて閉じる':'すべて開く';expandAll.disabled=terms.length>0}};
+for(const domain of domains)domain.toggle?.addEventListener('click',()=>{domain.open=!domain.open;apply()});
+expandAll?.addEventListener('click',()=>{const open=!foldable.every(domain=>domain.open);for(const domain of foldable)domain.open=open;apply()});
 search?.addEventListener('input',apply);apply();})();
 `;
 

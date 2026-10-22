@@ -135,6 +135,30 @@ class CatalogSearchPage extends DestinationPage {
   }
 }
 
+class CatalogTopPage extends DestinationPage {
+  constructor(page: Page, origin: string) {
+    super(page, `${origin}/catalog/index.html`, 'ドメインから確認内容をたどる');
+  }
+
+  async expectFeaturesFolded(): Promise<void> {
+    await expect(this.page.locator('[data-feature-row]:visible')).toHaveCount(0);
+  }
+
+  async openFirstDomainWithKeyboard(): Promise<void> {
+    const toggle = this.page.locator('[data-domain-toggle]').first();
+    await toggle.focus();
+    await this.page.keyboard.press('Enter');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(this.page.locator('[data-domain-overview]').first().locator('[data-feature-row]').first()).toBeVisible();
+  }
+
+  async searchShowsFeature(title: string): Promise<void> {
+    await this.page.getByRole('searchbox').fill(title);
+    await expect(this.page.locator('[data-feature-row]:visible')).toHaveCount(1);
+    await expect(this.page.locator('[data-feature-row]:visible')).toContainText(title);
+  }
+}
+
 class DocumentPage {
   readonly #page: Page;
   readonly #origin: string;
@@ -171,6 +195,7 @@ export class QualitySitePages {
   readonly release: DestinationPage;
   readonly catalog: CatalogSearchPage;
   readonly document: DocumentPage;
+  readonly top: CatalogTopPage;
 
   constructor(page: Page, origin: string) {
     this.page = page;
@@ -179,6 +204,7 @@ export class QualitySitePages {
     this.release = new DestinationPage(page, `${origin}/release.html`, '前回productionからの変更');
     this.catalog = new CatalogSearchPage(page, origin);
     this.document = new DocumentPage(page, origin);
+    this.top = new CatalogTopPage(page, origin);
   }
 
   async expectNoHorizontalOverflow(): Promise<void> {

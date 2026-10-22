@@ -18,6 +18,15 @@ test('テスト層でケースを絞り込める', async ({ qualitySite }) => {
   await qualitySite.catalog.filterByLayer('unit');
 });
 
+test('トップはfeatureを畳んで出し、開くか検索するとfeatureが見える', async ({ qualitySite }) => {
+  await qualitySite.top.open();
+  await qualitySite.top.expectLoaded();
+  await qualitySite.top.expectFeaturesFolded();
+  await qualitySite.top.openFirstDomainWithKeyboard();
+  await qualitySite.top.open();
+  await qualitySite.top.searchShowsFeature('請求');
+});
+
 test('featureのページで絞った条件のままケース検索を開ける', async ({ qualitySite }) => {
   await qualitySite.document.open('order-cancellation');
   const count = await qualitySite.document.filterByLayer('unit');
