@@ -44,7 +44,7 @@ describe('quality site', () => {
       for (const match of content.matchAll(/href="([^"]+)"/gu)) {
         const href = match[1];
         if (!href || /^[a-z]+:/u.test(href) || href.startsWith('#')) continue;
-        const target = path.posix.normalize(path.posix.join(path.posix.dirname(file), href));
+        const target = path.posix.normalize(path.posix.join(path.posix.dirname(file), href.split('?')[0] ?? href));
         expect(files.has(target), `${file} links to missing ${target}`).toBe(true);
       }
     }

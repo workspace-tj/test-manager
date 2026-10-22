@@ -102,8 +102,9 @@ class CatalogSearchPage extends DestinationPage {
     const rows = this.#page.locator('[data-case-row]:visible');
     await expect(rows.first()).toBeVisible();
     expect(await rows.evaluateAll((items, selectedLayer) => items.every((item) => JSON.parse(item.getAttribute('data-filters') ?? '{}').layer === selectedLayer), layer)).toBe(true);
-    const total = await this.#page.locator('[data-case-row]').count();
+    const total = Number.parseInt(await this.#page.locator('.catalog-intro strong span').innerText(), 10);
     expect(await rows.count()).toBeLessThan(total);
+    await expect(this.#page).toHaveURL(new RegExp(`[?&]layer=${layer}(?:&|$)`, 'u'));
   }
 
   async focusSearchWithKeyboard(): Promise<void> {
@@ -134,12 +135,42 @@ class CatalogSearchPage extends DestinationPage {
   }
 }
 
+class DocumentPage {
+  readonly #page: Page;
+  readonly #origin: string;
+
+  constructor(page: Page, origin: string) {
+    this.#page = page;
+    this.#origin = origin;
+  }
+
+  async open(documentId: string): Promise<void> {
+    await this.#page.goto(`${this.#origin}/catalog/documents/${documentId}.html`);
+  }
+
+  async filterByLayer(layer: string): Promise<number> {
+    const root = this.#page.locator('[data-case-filter-root]');
+    await root.getByLabel('テスト層').selectOption(layer);
+    const rows = root.locator('[data-case-row]:visible');
+    const count = await rows.count();
+    expect(count).toBeGreaterThan(0);
+    expect(await rows.evaluateAll((items, selectedLayer) => items.every((item) => JSON.parse(item.getAttribute('data-filters') ?? '{}').layer === selectedLayer), layer)).toBe(true);
+    await expect(root.locator('#case-filter-summary')).toHaveText(new RegExp(`^${count} / \\d+ケース$`, 'u'));
+    return count;
+  }
+
+  async openInCaseSearch(): Promise<void> {
+    await this.#page.getByRole('link', { name: 'ケース検索で開く' }).click();
+  }
+}
+
 export class QualitySitePages {
   readonly page: Page;
   readonly navigation: DashboardNavigation;
   readonly daily: DailyPage;
   readonly release: DestinationPage;
   readonly catalog: CatalogSearchPage;
+  readonly document: DocumentPage;
 
   constructor(page: Page, origin: string) {
     this.page = page;
@@ -147,6 +178,7 @@ export class QualitySitePages {
     this.daily = new DailyPage(page, origin);
     this.release = new DestinationPage(page, `${origin}/release.html`, '前回productionからの変更');
     this.catalog = new CatalogSearchPage(page, origin);
+    this.document = new DocumentPage(page, origin);
   }
 
   async expectNoHorizontalOverflow(): Promise<void> {

@@ -250,17 +250,17 @@ describe('project catalog', () => {
     const grouped = { ...catalog, rules: { ...catalog.rules, case: { ...catalog.rules.case, fields: { ...catalog.rules.case.fields, characteristic: enumRule(['functional', 'security']), path: enumRule(['normal', 'error']) } } },
       cases: catalog.cases.map((item, index) => index < 3 ? { ...item, fields: { ...item.fields, belongsTo: document, ...fields[index] } } : item) } as typeof catalog;
     const page = (await renderSite(grouped)).get(`documents/${document}.html`) ?? '';
-    const headings = [...page.matchAll(/<h([34])>([^<]+) <small>(\d+)件<\/small><\/h\1>/gu)].map((match) => `${match[1]}:${match[2]}:${match[3]}`);
+    const headings = [...page.matchAll(/<h([34])>([^<]+) <small data-group-count>(\d+)件<\/small><\/h\1>/gu)].map((match) => `${match[1]}:${match[2]}:${match[3]}`);
     expect(headings.slice(0, 4)).toEqual(['3:L-functional:1', '4:L-error:1', '3:L-security:1', '4:L-normal:1']);
     expect(headings[4]).toMatch(/^3:未設定:\d+$/u);
     expect(headings[5]).toBe('4:L-normal:1');
     const pathOnly = { ...grouped, rules: { ...grouped.rules, case: { ...grouped.rules.case, fields: { ...catalog.rules.case.fields, path: enumRule(['normal', 'error']) } } },
       cases: grouped.cases.map((item, index) => index === 1 ? { ...item, fields: { ...item.fields, path: 'unknown' } } : item) } as typeof catalog;
     const pathPage = (await renderSite(pathOnly)).get(`documents/${document}.html`) ?? '';
-    expect([...pathPage.matchAll(/<h([34])>([^<]+) <small>/gu)].map((match) => `${match[1]}:${match[2]}`)).toEqual(['3:L-normal', '3:未設定']);
+    expect([...pathPage.matchAll(/<h([34])>([^<]+) <small data-group-count>/gu)].map((match) => `${match[1]}:${match[2]}`)).toEqual(['3:L-normal', '3:未設定']);
     const flat = (await renderSite(catalog)).get(`documents/${document}.html`) ?? '';
     expect(flat).not.toMatch(/<h[34]>/u);
-    expect(flat).toMatch(/<li><a href="\.\.\/cases\/[^"]+\.html">[^<]+<\/a><small>[^<]+ · [^<]+<\/small><\/li>/u);
+    expect(flat).toMatch(/<li data-case-row [^>]+><a href="\.\.\/cases\/[^"]+\.html">[^<]+<\/a><small>[^<]+ · [^<]+<\/small><\/li>/u);
   });
 
   it('escapes field values and marks references to missing documents on case pages', async () => {
@@ -283,8 +283,9 @@ describe('project catalog', () => {
     expect(index).toMatch(/<span>テスト層<\/span><select id="layer-filter" data-filter-key="layer"><option value="">すべて<\/option><option value="e2e">e2e<\/option><option value="ui">ui<\/option><option value="unit">unit<\/option><\/select>/u);
     const unitCase = result.catalog.cases.find((item) => item.layer === 'unit');
     if (!unitCase) throw new Error('fixture must contain a unit case');
-    expect(index).toContain(`${unitCase.id} · unit · ${unitCase.source}`);
-    expect(index).toContain('&quot;layer&quot;:&quot;unit&quot;');
+    const data = site.get('cases/index-data.js') ?? '';
+    expect(data).toContain(`"id":"${unitCase.id}"`);
+    expect(data).toContain('"filters":{"layer":"unit"');
     expect(site.get(`cases/${unitCase.id}.html`)).toContain(`<code>${unitCase.id}</code><span>unit</span><span>${unitCase.source}</span>`);
   });
 
@@ -472,7 +473,7 @@ describe('project catalog', () => {
     const first = await renderSite(result.catalog);
     const second = await renderSite(result.catalog);
     expect([...first]).toEqual([...second]);
-    expect(first.get('cases/index.html')).toContain('href="../cases/CASE-001.html"');
+    expect(first.get('cases/index-data.js')).toContain('"href":"CASE-001.html"');
     expect(first.get('index.html')).not.toContain('id="source-filter"');
     expect(first.get('cases/index.html')).toContain('id="source-filter"');
     expect(first.get('cases/index.html')).toContain('id="status-filter"');
@@ -483,8 +484,8 @@ describe('project catalog', () => {
     expect(first.get('index.html')).toContain('class="segmented-nav"');
     expect(first.get('index.html')).toContain('aria-current="page">ドメイン</a>');
     expect(first.get('index.html')).toContain('>ケース検索</a>');
-    expect(first.get('index.html')).toContain('class="domain-overviews"');
-    expect(first.get('index.html')?.indexOf('id="search"')).toBeLessThan(first.get('index.html')?.indexOf('class="domain-overviews"') ?? 0);
+    expect(first.get('index.html')).toContain('class="domain-table"');
+    expect(first.get('index.html')?.indexOf('id="search"')).toBeLessThan(first.get('index.html')?.indexOf('class="domain-table"') ?? 0);
     expect(first.get('index.html')).toContain('data-domain-overview="orders"');
     expect(first.get('index.html')).toContain('商品カタログ');
     expect(first.get('index.html')).not.toContain('domainとfeatureから');
@@ -498,7 +499,7 @@ describe('project catalog', () => {
     expect(first.get('index.html')).not.toContain('ケースを直接探す');
     expect(first.get('cases/index.html')).toContain('aria-current="page">ケース検索</a>');
     expect(first.get('cases/index.html')).toContain('data-domain-filter="orders"');
-    expect(first.get('cases/index.html')).toContain('data-domain-group="orders"');
+    expect(first.get('cases/index-data.js')).toContain('"domain":"orders"');
     expect(first.get('cases/index.html')).toContain('id="role-filter"');
     expect(first.get('index.html')).toContain('注文取消');
     expect(first.get('cases/CASE-301.html')).toContain('<code>CASE-301</code>');
@@ -553,7 +554,7 @@ describe('project catalog', () => {
       for (const match of content.matchAll(/href="([^"]+)"/gu)) {
         const href = match[1];
         if (!href || /^(?:https?:|#)/u.test(href)) continue;
-        await expect(import('node:fs/promises').then(({ access }) => access(path.resolve(out, path.dirname(name), href)))).resolves.toBeUndefined();
+        await expect(import('node:fs/promises').then(({ access }) => access(path.resolve(out, path.dirname(name), href.split('?')[0] ?? href)))).resolves.toBeUndefined();
       }
       expect(content).not.toContain(result.catalog.projectRoot);
     }
@@ -561,50 +562,108 @@ describe('project catalog', () => {
     expect(await snapshot()).toEqual(first);
   });
 
-  it('applies search and project-defined filters together in the generated browser script', async () => {
+  it('narrows document-page cases in place and keeps the case-search link on the same conditions', async () => {
+    const files = await renderSite((await checkProject(path.join(fixture, 'test-manager.yaml')) as { catalog: Parameters<typeof renderSite>[0] }).catalog);
+    const listeners = new Map<object, Record<string, () => void>>();
+    const listen = function (this: object, event: string, listener: () => void) { const own = listeners.get(this) ?? {}; own[event] = listener; listeners.set(this, own); };
+    const search = { value: '', addEventListener: listen };
+    const layer = { value: '', dataset: { filterKey: 'layer' }, addEventListener: listen };
+    const row = (search: string, values: object) => ({ hidden: false, dataset: { search, filters: JSON.stringify(values) } });
+    const rows = [row('case-1 取消', { layer: 'unit' }), row('case-2 取消', { layer: 'e2e' }), row('case-3 表示', { layer: 'e2e' })];
+    const group = (members: typeof rows) => { const label = { textContent: '' }; return { hidden: false, label, querySelector: () => label, querySelectorAll: () => members.filter((member) => !member.hidden) }; };
+    const outer = group(rows);
+    const first = group([rows[0]!]);
+    const second = group([rows[1]!, rows[2]!]);
+    const summary = { textContent: '' };
+    const empty = { hidden: true };
+    const link = { href: '../cases/index.html?feature=orders', getAttribute() { return this.href; }, setAttribute(_name: string, value: string) { this.href = value; } };
+    const elements: Record<string, unknown> = { '#case-filter-search': search, '#case-filter-summary': summary, '#case-filter-empty': empty, '#open-in-search': link };
+    const root = { querySelector: (selector: string) => elements[selector], querySelectorAll: (selector: string) => selector === '[data-filter-key]' ? [layer] : selector === '[data-case-row]' ? rows : [outer, first, second] };
+    runInNewContext(files.get('assets/document.js') ?? '', { document: { querySelector: () => root }, URLSearchParams, JSON, String });
+    expect(summary.textContent).toBe('3ケース');
+    layer.value = 'e2e';
+    listeners.get(layer)?.change?.();
+    expect(rows.map((item) => item.hidden)).toEqual([true, false, false]);
+    expect([outer.hidden, first.hidden, second.hidden]).toEqual([false, true, false]);
+    expect(second.label.textContent).toBe('2件');
+    expect(summary.textContent).toBe('2 / 3ケース');
+    expect(link.href).toBe('../cases/index.html?feature=orders&layer=e2e');
+    search.value = 'nothing';
+    listeners.get(search)?.input?.();
+    expect(outer.hidden).toBe(true);
+    expect(empty.hidden).toBe(false);
+  });
+
+  it('shows every feature of a matching domain on the top page, and only matching features otherwise', async () => {
+    const files = await renderSite((await checkProject(path.join(fixture, 'test-manager.yaml')) as { catalog: Parameters<typeof renderSite>[0] }).catalog);
+    const listeners: Record<string, () => void> = {};
+    const search = { value: '', addEventListener: (event: string, listener: () => void) => { listeners[event] = listener; } };
+    const feature = (search: string) => ({ hidden: false, dataset: { search } });
+    const ordersFeatures = [feature('注文取消'), feature('返品')];
+    const catalogFeatures = [feature('価格計算')];
+    const domain = (search: string, features: ReturnType<typeof feature>[]) => ({ hidden: false, dataset: { search }, querySelectorAll: () => features });
+    const domains = [domain('受注 orders', ordersFeatures), domain('商品カタログ catalog', catalogFeatures)];
+    const empty = { hidden: true };
+    runInNewContext(files.get('assets/overview.js') ?? '', { document: { querySelector: (selector: string) => selector === '#search' ? search : empty, querySelectorAll: () => domains } });
+    search.value = '受注';
+    listeners.input?.();
+    expect(domains.map((item) => item.hidden)).toEqual([false, true]);
+    expect(ordersFeatures.map((item) => item.hidden)).toEqual([false, false]);
+    search.value = '返品';
+    listeners.input?.();
+    expect(ordersFeatures.map((item) => item.hidden)).toEqual([true, false]);
+    search.value = 'なし';
+    listeners.input?.();
+    expect(empty.hidden).toBe(false);
+  });
+
+  it('applies search, project-defined filters and URL conditions together in the case search script', async () => {
     const result = await checkProject(path.join(fixture, 'test-manager.yaml'));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const files = await renderSite(result.catalog);
     const listeners = new Map<object, Record<string, () => void>>();
-    const control = (key?: string) => ({ value: '', dataset: key ? { filterKey: key } : {}, addEventListener(event: string, listener: () => void) { const own = listeners.get(this) ?? {}; own[event] = listener; listeners.set(this, own); } });
+    const listen = function (this: object, event: string, listener: () => void) { const own = listeners.get(this) ?? {}; own[event] = listener; listeners.set(this, own); };
+    const control = (key?: string, options: string[] = []) => ({ value: '', options: options.map((value) => ({ value })), dataset: key ? { filterKey: key } : {}, addEventListener: listen });
     const search = control();
-    const source = control('source');
-    const role = control('role');
-    const overviews = [
-      { hidden: false, dataset: { domainOverview: 'orders', search: '受注 注文取消 cancellation case-1 product' } },
-      { hidden: false, dataset: { domainOverview: 'catalog', search: '商品カタログ calculation case-2 engineering' } },
-    ];
-    const rows = [
-      { hidden: false, dataset: { domain: 'orders', search: 'case-1 cancellation product', filters: JSON.stringify({ source: 'vitest', role: 'product' }) } },
-      { hidden: false, dataset: { domain: 'catalog', search: 'case-2 calculation engineering', filters: JSON.stringify({ source: 'playwright', role: 'engineering' }) } },
-    ];
-    const groups = [{ hidden: false, dataset: { domainGroup: 'orders' } }, { hidden: false, dataset: { domainGroup: 'catalog' } }];
-    const domainControl = (domain: string) => ({
-      dataset: { domainFilter: domain }, classList: { toggle() {} }, setAttribute() {},
-      addEventListener(event: string, listener: () => void) { const own = listeners.get(this) ?? {}; own[event] = listener; listeners.set(this, own); },
-    });
+    const source = control('source', ['', 'manual', 'playwright', 'storybook', 'vitest']);
+    const domainControl = (domain: string) => ({ dataset: { domainFilter: domain }, classList: { toggle() {} }, setAttribute() {}, addEventListener: listen });
     const allDomains = domainControl('');
     const orders = domainControl('orders');
+    const results = { innerHTML: '' };
     const summary = { textContent: '' };
     const empty = { hidden: true };
-    const document = {
-      querySelector: (selector: string) => selector === '#search' ? search : selector === '#result-summary' ? summary : selector === '#empty-results' ? empty : undefined,
-      querySelectorAll: (selector: string) => selector === '[data-filter-key]' ? [source, role] : selector === '[data-domain-overview]' ? overviews : selector === '[data-case-row]' ? rows : selector === '[data-domain-group]' ? groups : [allDomains, orders],
-    };
-    runInNewContext(files.get('assets/search.js') ?? '', { document, JSON, String });
-    search.value = 'PRODUCT case-1'; source.value = 'vitest'; role.value = 'product';
-    listeners.get(role)?.change?.();
-    expect(rows.map((row) => row.hidden)).toEqual([false, true]);
-    expect(overviews.map((overview) => overview.hidden)).toEqual([false, true]);
-    search.value = 'calculation case-2'; source.value = ''; role.value = '';
+    const more = { hidden: true, textContent: '', addEventListener: listen };
+    const label = { textContent: '' };
+    const clear = { addEventListener: listen };
+    const featureNote = { hidden: true, querySelector: (selector: string) => selector === '[data-feature-label]' ? label : clear };
+    const elements: Record<string, unknown> = { '#search': search, '#result-summary': summary, '#empty-results': empty, '#case-results': results, '#show-more': more, '#feature-filter': featureNote };
+    const document = { querySelector: (selector: string) => elements[selector], querySelectorAll: (selector: string) => selector === '[data-filter-key]' ? [source] : selector === '[data-domain-filter]' ? [allDomains, orders] : [] };
+    const urls: string[] = [];
+    const window: Record<string, unknown> = {};
+    const context = { window, document, location: { search: '?feature=order-cancellation&source=vitest&unknown=1', pathname: '/cases/index.html' }, history: { replaceState: (_state: unknown, _title: string, url: string) => urls.push(url) }, URLSearchParams, Map, JSON, String, Math };
+    runInNewContext(files.get('cases/index-data.js') ?? '', context);
+    const all = window.testManagerCases as ReadonlyArray<{ id: string; source: string; ancestors: string[] }>;
+    runInNewContext(files.get('assets/search.js') ?? '', context);
+    const shown = () => [...results.innerHTML.matchAll(/<small>([^ ]+) · /gu)].map((match) => match[1]);
+    const expected = all.filter((item) => item.source === 'vitest' && item.ancestors.includes('order-cancellation')).map((item) => item.id);
+    expect(expected.length).toBeGreaterThan(0);
+    expect(shown()).toEqual(expected);
+    expect(source.value).toBe('vitest');
+    expect(featureNote.hidden).toBe(false);
+    expect(label.textContent).not.toBe('');
+    expect(summary.textContent).toBe(`${expected.length}ケース`);
+    search.value = 'no-such-case';
     listeners.get(search)?.input?.();
-    expect(rows.map((row) => row.hidden)).toEqual([true, false]);
-    search.value = '';
+    expect(shown()).toEqual([]);
+    expect(empty.hidden).toBe(false);
+    expect(urls.at(-1)).toBe('?q=no-such-case&feature=order-cancellation&source=vitest');
+    search.value = ''; source.value = '';
+    listeners.get(clear)?.click?.();
+    expect(shown()).toEqual(all.map((item) => item.id).slice(0, 200));
     listeners.get(orders)?.click?.();
-    expect(rows.map((row) => row.hidden)).toEqual([false, true]);
-    expect(groups.map((group) => group.hidden)).toEqual([false, true]);
-    expect(summary.textContent).toBe('1ケース');
+    expect(urls.at(-1)).toBe('?domain=orders');
+    expect(featureNote.hidden).toBe(true);
   });
 
   it('refuses unsafe output targets and directories without its exact marker', async () => {
