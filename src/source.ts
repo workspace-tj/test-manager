@@ -83,8 +83,18 @@ const firstBodyComment = (call: t.CallExpression): Comment | undefined => {
   const callback = call.arguments.find((argument) => t.isArrowFunctionExpression(argument) || t.isFunctionExpression(argument));
   if (!callback || !t.isBlockStatement(callback.body)) return undefined;
   const first = callback.body.body[0];
-  if (first) return immediateComment(first);
-  return callback.body.innerComments?.[0];
+  if (!first) return callback.body.innerComments?.[0];
+  // The @case-doc block may be followed by ordinary line comments (`// why: ...`) before the first statement,
+  // so look through the comments stacked directly above it, not only the nearest one.
+  const comments = first.leadingComments ?? [];
+  let above = first.loc?.start.line;
+  for (let index = comments.length - 1; index >= 0; index -= 1) {
+    const comment = comments[index];
+    if (!comment?.loc || above === undefined || comment.loc.end.line + 1 !== above) break;
+    if (/^\*?\s*(?:\*\s*)?@case-doc\b/u.test(comment.value.trimStart())) return comment;
+    above = comment.loc.start.line;
+  }
+  return immediateComment(first);
 };
 
 const parseSource = (source: string, file: string): Readonly<{ ast?: t.File; diagnostics: ReadonlyArray<Diagnostic> }> => {

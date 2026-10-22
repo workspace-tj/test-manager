@@ -212,6 +212,21 @@ describe('unsupported source syntax', () => {
     expect(result.cases[0]?.details).toEqual({ preconditions: ['signed in'] });
   });
 
+  it('reads @case-doc even when line comments follow it before the first statement', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-case-doc-comments-'));
+    const config = path.join(root, 'test-manager.yaml');
+    const original = await (await import('node:fs/promises')).readFile(path.resolve('fixtures/valid/test-manager.yaml'), 'utf8');
+    await writeFile(config, original.replace('conditions:', 'preconditions:'), 'utf8');
+    const loaded = await loadRules(config);
+    if (!loaded.rules) return;
+    const file = path.join(root, 'commented.test.ts');
+    await writeFile(file, `import { test } from 'vitest';\n/*\n@case\nbelongsTo: orders\nrole: product\nimpact: 1\n*/\ntest('commented', { meta: { caseId: 'CASE-999' } }, () => {\n  /**\n   * @case-doc\n   * preconditions: [signed in]\n   */\n  // why: the reason stays a plain comment\n  // and may span lines\n  const value = 1;\n});\n`, 'utf8');
+    const documents = [{ id: documentIdSchema(/.*/u).parse('orders'), kind: 'domain', title: 'Orders', body: '', location: { file: 'orders.md', line: 1, column: 1 } }];
+    const result = await readTestSource(file, root, 'vitest', 'unit', loaded.rules, documents);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.cases[0]?.details).toEqual({ preconditions: ['signed in'] });
+  });
+
   it('diagnoses marked wrappers, namespace calls, and Story factories instead of silently dropping them', async () => {
     const loaded = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
     if (!loaded.rules) return;
