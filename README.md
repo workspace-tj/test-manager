@@ -8,7 +8,25 @@
 
 トップ画面のdomain一覧は、配下の文書ごとにケース数とlayer別の件数を示します。`belongsTo` の参照先にできる文書のうち配下にケースが1件もないものは「ケースのない文書」として一覧します。網羅性の判定ではなく、確認内容がまだ登録されていない事実の表示です。
 
-![生成されたテストカタログの一覧画面](docs/assets/test-knowledge-catalog.png)
+画面の例は、ネットショップを想定した見本のプロジェクト [examples/showcase](examples/showcase) から作っています。`check` や `build` の `--config` に `examples/showcase/test-manager.yaml` を渡せば、手元で同じ画面を作れます。
+
+![カタログのトップ画面。domainごとの文書とケース数、集計の表、ケースのない文書](docs/assets/guide-catalog-top.png)
+
+### カタログの画面
+
+文書のページは、本文の Markdown と、その文書に属するケースを出します。ケースは品質特性と正常系・異常系の見出しに分け、それぞれに layer と記述方式を添えます。
+
+![文書のページ。仕様の本文と、品質特性・正常系・異常系に分けたケース](docs/assets/guide-document.png)
+
+ケース検索では、複数の語で検索し、domain・layer・記述方式・状態・プロジェクト独自の分類で絞り込めます。
+
+![ケース検索。分類の絞り込みとケースの一覧](docs/assets/guide-case-search.png)
+
+ケースのページは、分類、前提条件や理由、`each` の表、ソースを出します。手動ケースは操作と期待結果を表で出します。
+
+![Vitestのケースのページ。分類、eachの表、ソース](docs/assets/guide-case.png)
+
+![手動ケースのページ。前提条件、理由、操作と期待結果](docs/assets/guide-manual-case.png)
 
 test-manager はテストランナーそのものではありません。runner reporterが出力した事実をCI manifestと統合し、テスト定義と実行結果を日次・リリース差分画面へ接続します。
 
@@ -20,7 +38,7 @@ test-manager はテストランナーそのものではありません。runner 
 
 CI開始前に確定したmanifestと、Vitest・Playwright reporterが生成したunit artifactを一つの`TestRun`へ統合します。成功・失敗だけでなく、想定失敗、想定外成功、skip、retry成功、timeout、結果欠損、runnerの途中終了を区別して表示します。比較対象は同じenvironment・scopeの前回runに限定し、条件が異なる場合は比較不能と表示します。
 
-![VitestとPlaywrightの結果を統合した日次実行画面](docs/assets/quality-dashboard-daily.png)
+![日次実行画面。前回からの変化、domainごとの結果、直近の推移、不安定なケース、失敗が続いているケース](docs/assets/guide-daily.png)
 
 `daily`・`dashboard` に `--history-dir <path>` を渡すと、そのディレクトリ直下の `*.json` を過去の `TestRun` として読み、日次画面に直近の推移、不安定なケース、失敗が続いているケースを追加します。
 
@@ -34,7 +52,7 @@ CI開始前に確定したmanifestと、Vitest・Playwright reporterが生成し
 
 前回production commitと現在のstaging commitで生成したcatalog snapshotを比較し、追加・変更・削除されたケースをdomain・feature単位に表示します。自動テストは任意でstagingの最新結果を添えます。手動ケースは任意で手動実施結果を添え、確認したcommit・日時と、確認後にケースの定義が変わったかを示します。
 
-![productionとstagingのcatalogを比較したリリース差分画面](docs/assets/quality-dashboard-release.png)
+![リリース差分画面。featureごとに追加・変更・削除されたケースと、stagingの結果、手動テストの実施結果](docs/assets/guide-release.png)
 
 ## 想定する使い方
 
@@ -78,6 +96,8 @@ node dist/cli-entry.js dashboard \
   --out /tmp/test-manager-dashboard
 ```
 
+README の画面は `pnpm build && node scripts/guide-screenshots.mjs` で `docs/assets` に作り直せます。見本のプロジェクトから catalog を作り、日次実行の8回分、productionのcatalog、手動テストの結果は、画面の状態がひととおり出るようにスクリプトの中で作ります。
+
 `pnpm test` は型付きビルドとVitestを実行した後、Playwright Testで生成dashboardを実ブラウザ検証します。E2Eはdesktopとmobile viewportで同じシナリオを実行し、主要画面の移動、ケース検索、キーボード操作、フォーカス表示、横方向のはみ出しを確認します。E2Eだけを再実行する場合は `pnpm test:e2e` を使用します。
 
 Linux CIではブラウザのシステム依存も必要なため、`.github/workflows/ci.yml` が `pnpm exec playwright install --with-deps chromium` を実行します。ローカルのmacOSでは上記の `playwright install chromium` で十分です。
@@ -95,6 +115,35 @@ E2Eの画面操作は `src/quality-site.e2e.pages.ts` の薄いPage Objectへ集
 リリース差分では、productionとstagingの各checkoutで `snapshot --config <path> --commit <sha> --out <path>` を実行します。その `release-catalog.json` 2件を `release --production-snapshot <path> --staging-snapshot <path> --out <path>` へ渡します。stagingの実行事実も表示する場合は、同じcommit・`staging`環境のrunを `--latest-staging-run` で指定します。
 
 PRごとの差分は `pr-comment --base-snapshot <path> --head-snapshot <path> [--out <path>]` で、追加・変更・削除されたケースをdomain・featureごとに並べたMarkdownとして出力できます。変更したケースには、値が変わった項目を「重要度: S → A」のように、項目と値の表示名で添えます。所属する機能の付け替えや重要度の上げ下げを、レビューで見落とさないためです。長い文は40文字で切ります。投稿はCIなど利用側が行います（[GitHub Actions導入例](examples/github-actions/README.md#prへケースの変更をコメントする)）。
+
+見本のプロジェクトでの出力です。
+
+```md
+<!-- test-manager:pr-comment -->
+### test-manager: ケースの変更
+
+base `6e2b11a0c1d2` → head `7f3a12c9d4e5` · 追加 2 · 変更 2 · 削除 1
+
+#### 会員と権限 / 役割ごとの操作権限
+
+- 追加 `CASE-032` スタッフの画面には請求書の発行ボタンが出ない · e2e
+
+#### 請求管理 / 請求書の発行
+
+- 変更 `CASE-021` 発行済みの請求書は変更できない · unit
+- 削除 `CASE-034` 請求書を CSV で出力できる · e2e
+
+#### 注文管理 / 注文の確定
+
+- 追加 `CASE-007` 100品目のカートでも3秒以内に確定できる · e2e
+
+#### 注文管理 / 注文の取消
+
+- 変更 `CASE-011` 出荷済みの注文は取り消せない · unit
+  - 重要度: B → A
+
+登録済みケースの差分です。網羅性やマージ可否は判定しません。
+```
 
 手動ケースの実施結果は `--manual-results <path>` で渡します（`release`・`dashboard`、複数指定可）。記録した場所や外部ツールは問わず、次の形式のJSONへ変換して渡します。
 

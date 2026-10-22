@@ -1,0 +1,14 @@
+id: CASE-018
+title: 店舗の担当者が電話の依頼で注文を取り消せる
+belongsTo: order-cancellation
+rank: A
+characteristic: functional
+path: normal
+conditions:
+  - 店舗の担当者でログインしている
+reason: 電話の受付の流れに沿っているかを人が確かめるため
+steps:
+  - action: 注文番号で注文を探す
+    expected: 注文の詳細が出る
+  - action: 取消を押して理由に「電話の依頼」を選ぶ
+    expected: 取消が完了し、返金額が出る

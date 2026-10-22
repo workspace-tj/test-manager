@@ -1,0 +1,94 @@
+# test-manager の利用ガイドの画面を作るための見本のプロジェクト（ネットショップの注文・請求・会員）
+version: 1
+idPattern: "^(?:[a-z][a-z0-9-]*|CASE-[0-9]{3})$"
+
+discovery:
+  documents: ["knowledge/**/*.md"]
+  sources:
+    unit:
+      description: Vitest で動く。DB やブラウザは使わない
+      vitest: ["src/**/*.test.ts"]
+    ui:
+      description: Storybook の Story として部品を描画する
+      storybook: ["src/**/*.stories.tsx"]
+    e2e:
+      description: Playwright で、起動したアプリケーションを画面から操作する。手動のケースもここに入れる
+      playwright: ["journeys/**/*.spec.ts"]
+      manual: ["knowledge/**/*.manual.yaml"]
+
+documents:
+  kinds:
+    domain:
+      description: 業務領域
+      parent: { required: false, targetKinds: [] }
+    feature:
+      description: 機能・業務ルールの単位
+      parent: { required: true, targetKinds: [domain] }
+    decision:
+      description: 仕様を決めたときの判断と理由
+      parent: { required: true, targetKinds: [feature] }
+  displayOrder:
+    domain: [orders, billing, accounts]
+    feature: [checkout, order-cancellation, invoice-issue, tax-rounding, payment-reminder, member-roles]
+
+case:
+  fields:
+    belongsTo:
+      label: 対象の機能
+      type: reference
+      targetKinds: [feature]
+      placement: classification
+      required: true
+    refs:
+      label: 影響を確かめる他の機能
+      type: reference-list
+      targetKinds: [feature, decision]
+      placement: classification
+      required: false
+      uniqueItems: true
+    rank:
+      label: 重要度
+      type: enum
+      placement: classification
+      required: true
+      playwrightTag: "@rank-{value}"
+      values:
+        S: { label: S, description: 壊れると金額・権限・データに関わる }
+        A: { label: A, description: 主要な操作に影響する }
+        B: { label: B, description: 影響が限定的 }
+    characteristic:
+      label: 品質特性
+      type: enum
+      placement: classification
+      required: true
+      values:
+        functional: { label: 機能, description: 計算・業務ルールの正しさ }
+        usability: { label: UI・操作性, description: 表示、入力の制限、案内 }
+        security: { label: 権限・セキュリティ, description: 権限、テナントの分離 }
+        reliability: { label: 信頼性, description: 障害時、再実行、同時操作 }
+        performance: { label: 性能, description: 応答時間や処理量 }
+    path:
+      label: 正常系・異常系
+      type: enum
+      placement: classification
+      required: true
+      values:
+        normal: { label: 正常系, description: 正しい入力・操作で期待どおりに動く }
+        boundary: { label: 境界・エッジケース, description: 0件・上限・端数など、正常だが崩れやすい条件 }
+        error: { label: 異常系, description: 誤った入力・操作・権限で、拒否や案内が正しく出る }
+    conditions:
+      label: 前提条件
+      type: text-list
+      placement: detail
+      required: false
+    reason:
+      label: 確かめる理由
+      type: text
+      placement: detail
+      required: false
+
+reports:
+  breakdowns:
+    - { rows: domain, columns: layer }
+    - { rows: domain, columns: rank }
+    - { rows: belongsTo, columns: characteristic }
