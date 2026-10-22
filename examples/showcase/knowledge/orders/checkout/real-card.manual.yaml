@@ -1,0 +1,17 @@
+id: CASE-009
+title: 本番相当の決済代行で実際のカードで支払える
+belongsTo: checkout
+rank: A
+characteristic: functional
+path: normal
+conditions:
+  - 決済代行の本番相当の環境
+  - 社用のテストカード
+reason: 決済代行の画面は自動テストから操作できないため
+steps:
+  - action: 商品をカートに入れて注文画面へ進む
+    expected: 支払い方法にカードが出る
+  - action: テストカードの番号を入れて確定する
+    expected: 完了画面に注文番号が出る
+  - action: 決済代行の管理画面を開く
+    expected: 同じ金額の売上が1件ある

@@ -1,0 +1,14 @@
+id: CASE-025
+title: 取引先に届いたメールから請求書を開ける
+belongsTo: invoice-issue
+rank: A
+characteristic: usability
+path: normal
+conditions:
+  - 取引先のメールアドレスが実在の受信箱
+reason: メールの受信は自動テストで確かめられないため
+steps:
+  - action: 請求書を発行する
+    expected: 取引先にメールが届く
+  - action: メールのリンクを開く
+    expected: 請求書の PDF が開く

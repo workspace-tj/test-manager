@@ -1,0 +1,12 @@
+id: CASE-033
+title: 別の店舗の注文を URL で開いても見えない
+belongsTo: member-roles
+rank: S
+characteristic: security
+path: error
+conditions:
+  - 2つの店舗に担当者がいる
+reason: 画面を通さない操作でも漏れないことを人が確かめるため
+steps:
+  - action: 店舗Aの担当者で、店舗Bの注文の URL を開く
+    expected: 「見つかりません」と出て、注文の中身は出ない
