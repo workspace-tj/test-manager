@@ -167,7 +167,7 @@ export const readTestSource = async (
         if (kind === 'playwright' && tagFieldNames(rules.case.fields).length > 0) {
           const collected = collectPlaywrightTags(callPath, shape.name);
           if (collected.dynamic) diagnostics.push(diagnostic('TM211', relative, title, 'tags must be static strings so tag fields can be read', line));
-          const fromTags = fieldsFromTags(collected.tags, rules.case.fields);
+          const fromTags = fieldsFromTags(collected.levels, rules.case.fields);
           for (const conflict of fromTags.conflicts) diagnostics.push(diagnostic('TM212', relative, title, `tags set ${conflict.field} to several values: ${conflict.values.join(', ')}`, line));
           for (const name of tagFieldNames(rules.case.fields)) if (before.value && name in before.value) {
             diagnostics.push(diagnostic('TM213', relative, title, `${name} must be written as a Playwright tag, not in @case`, line));

@@ -55,6 +55,19 @@ describe('Playwright tags as case fields', () => {
     expect([twice, dynamic, inMarker].flatMap((result) => result.cases)).toEqual([]);
   });
 
+  it('lets the tag on the test override the tag on its describe, and an inner describe override an outer one', async () => {
+    const { read } = await setup(rankField);
+    const result = await read(`test.describe('outer', { tag: '@rank-B' }, () => {\n  test.describe('inner', { tag: '@rank-A' }, () => {\n    ${marker}\n    test('own', { tag: '@rank-S', annotation: { type: 'case-id', description: 'CASE-910' } }, async () => {});\n    ${marker}\n    test('inner default', { annotation: { type: 'case-id', description: 'CASE-911' } }, async () => {});\n  });\n});`);
+    expect(result.diagnostics).toEqual([]);
+    expect(result.cases.map((item) => [item.id, item.fields.rank])).toEqual([['CASE-910', 'S'], ['CASE-911', 'A']]);
+  });
+
+  it('reports two values on the innermost level that sets the field, even when an outer level has one', async () => {
+    const { read } = await setup(rankField);
+    const result = await read(`test.describe('group', { tag: ['@rank-S', '@rank-A'] }, () => {\n  ${marker}\n  test('inherits', { annotation: { type: 'case-id', description: 'CASE-912' } }, async () => {});\n});`);
+    expect(result.diagnostics.map((item) => item.code)).toEqual(['TM212']);
+  });
+
   it('keeps a repeated tag on the test and its describe as one value', async () => {
     const { read } = await setup(rankField);
     const result = await read(`test.describe('group', { tag: '@rank-S' }, () => {\n  ${marker}\n  test('repeated', { tag: '@rank-S', annotation: { type: 'case-id', description: 'CASE-906' } }, async () => {});\n});`);
