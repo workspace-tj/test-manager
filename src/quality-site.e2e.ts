@@ -18,6 +18,14 @@ test('テスト層でケースを絞り込める', async ({ qualitySite }) => {
   await qualitySite.catalog.filterByLayer('unit');
 });
 
+test('featureのページで絞った条件のままケース検索を開ける', async ({ qualitySite }) => {
+  await qualitySite.document.open('order-cancellation');
+  const count = await qualitySite.document.filterByLayer('unit');
+  await qualitySite.document.openInCaseSearch();
+  await qualitySite.catalog.expectLoaded();
+  await qualitySite.catalog.expectVisibleCases(count);
+});
+
 test('キーボードだけで主要画面とdomain絞り込みを操作できる', async ({ qualitySite }) => {
   await qualitySite.daily.open();
   await qualitySite.navigation.openReleaseWithKeyboard();

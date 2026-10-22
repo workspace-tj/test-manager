@@ -6,19 +6,19 @@
 
 カタログ画面は検証済みcatalogを純粋なTypeScript rendererへ渡して静的HTMLへ変換します。CLI実行時にWebフレームワークを起動せず、持ち運べる生成物をtest-managerのmanaged output境界から公開します。
 
-トップ画面のdomain一覧は、配下の文書ごとにケース数とlayer別の件数を示します。`belongsTo` の参照先にできる文書のうち配下にケースが1件もないものは「ケースのない文書」として一覧します。網羅性の判定ではなく、確認内容がまだ登録されていない事実の表示です。
+トップ画面は、domainとその配下のfeatureを1つの表に並べ、ケース数とlayer別の件数を示します。ケース数は、そのfeatureで絞ったケース検索へのリンクです。`belongsTo` の参照先にできる文書のうち配下にケースが1件もないものは「ケースのない文書」として一覧します。網羅性の判定ではなく、確認内容がまだ登録されていない事実の表示です。
 
 画面の例は、ネットショップを想定した見本のプロジェクト [examples/showcase](examples/showcase) から作っています。`check` や `build` の `--config` に `examples/showcase/test-manager.yaml` を渡せば、手元で同じ画面を作れます。
 
-![カタログのトップ画面。domainごとの文書とケース数、集計の表、ケースのない文書](docs/assets/guide-catalog-top.png)
+![カタログのトップ画面。domainとfeatureのケース数の表、集計の表、ケースのない文書](docs/assets/guide-catalog-top.png)
 
 ### カタログの画面
 
-文書のページは、本文の Markdown と、その文書に属するケースを出します。ケースは品質特性と正常系・異常系の見出しに分け、それぞれに layer と記述方式を添えます。
+文書のページは、本文の Markdown と、その文書に属するケースを出します。ケースは品質特性と正常系・異常系の見出しに分け、それぞれに layer と記述方式を添えます。ケースの上の絞り込みで、語句・layer・記述方式・状態・分類の項目を選ぶと、その場で一覧と見出しの件数が絞られます。「ケース検索で開く」は、同じ条件のケース検索を開きます。
 
 ![文書のページ。仕様の本文と、品質特性・正常系・異常系に分けたケース](docs/assets/guide-document.png)
 
-ケース検索では、複数の語で検索し、domain・layer・記述方式・状態・プロジェクト独自の分類で絞り込めます。
+ケース検索では、複数の語で検索し、domain・feature・layer・記述方式・状態・プロジェクト独自の分類で絞り込めます。条件はURLに入るので、`cases/index.html?feature=checkout&rank=S` のように、絞った状態のページを共有できます。ケースのデータは `cases/index-data.js` に持ち、条件に合うものを200件ずつ表示するので、ケースが数千件あっても重くなりません。
 
 ![ケース検索。分類の絞り込みとケースの一覧](docs/assets/guide-case-search.png)
 
