@@ -188,6 +188,11 @@ export const buildReleaseDiff = (input: ReleaseDiffInput): ReleaseDiffResult => 
       if (value === undefined) return 'なし';
       const rule = snapshot.fieldLabels?.[field] ?? other.fieldLabels?.[field];
       const one = (item: unknown): string => {
+        // Keyed notes read as "<kind label>: <text>", the way the case page shows them.
+        if (rule?.kind === 'keyed' && item !== null && typeof item === 'object' && !Array.isArray(item)) {
+          const [key, text] = Object.entries(item)[0] ?? ['', ''];
+          return `${snapshot.fieldLabels?.[field]?.values?.[key] ?? other.fieldLabels?.[field]?.values?.[key] ?? key}: ${String(text)}`;
+        }
         if (typeof item !== 'string' && typeof item !== 'number') return JSON.stringify(item);
         if (rule?.kind === 'enum') return snapshot.fieldLabels?.[field]?.values?.[String(item)] ?? other.fieldLabels?.[field]?.values?.[String(item)] ?? String(item);
         if (rule?.kind === 'reference') return titles.get(String(item)) ?? otherTitles.get(String(item)) ?? String(item);

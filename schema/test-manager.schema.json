@@ -445,6 +445,66 @@
                   "type"
                 ],
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "placement": {
+                    "type": "string",
+                    "enum": [
+                      "classification",
+                      "detail"
+                    ]
+                  },
+                  "requiredWhen": {
+                    "$ref": "#/$defs/RequiredWhen"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "keyed-text-list"
+                  },
+                  "values": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "description": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "description"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "minItems": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "placement",
+                  "type",
+                  "values"
+                ],
+                "additionalProperties": false
               }
             ]
           }

@@ -34,6 +34,20 @@ const schemaFor = (rule: FieldRule, idPattern: RegExp): z.ZodType => {
       if (rule.uniqueItems) schema = schema.refine((items) => Array.isArray(items) && new Set(items).size === items.length, issue('TM125', 'duplicate items are not allowed'));
       return schema;
     }
+    case 'keyed-text-list': {
+      const keys = Object.keys(rule.values);
+      const shapeMessage = `TM135 each item must be one \`<key>: <text>\` pair (keys: ${keys.join(', ')})`;
+      const entry = z.unknown().superRefine((value, context) => {
+        const pairs = value !== null && typeof value === 'object' && !Array.isArray(value) ? Object.entries(value) : [];
+        const [pair] = pairs;
+        if (pairs.length !== 1 || !pair || typeof pair[1] !== 'string' || pair[1].trim() === '') context.addIssue({ code: 'custom', message: shapeMessage });
+        else if (!keys.includes(pair[0])) context.addIssue({ code: 'custom', message: `TM123 key ${pair[0]} is not allowed (keys: ${keys.join(', ')})` });
+      });
+      let schema: z.ZodType = z.array(entry);
+      const minItems = rule.minItems;
+      if (minItems !== undefined) schema = schema.refine((items) => Array.isArray(items) && items.length >= minItems, issue('TM124', `requires at least ${minItems} item(s)`));
+      return schema;
+    }
   }
 };
 

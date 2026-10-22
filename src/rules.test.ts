@@ -89,6 +89,20 @@ describe('project-defined vocabulary', () => {
     expect(validateCaseFields({ belongsTo: 'invoice-issue', refs: ['billing'] }, featureOnly, documents, 'case.ts').map((item) => item.code)).toEqual(['TM127']);
   });
 
+  it('accepts keyed notes only as one `<key>: <text>` pair per item with a configured key', () => {
+    const rules = {
+      belongsTo: { required: true as const, placement: 'classification' as const, type: 'reference' as const, targetKinds: ['area'] },
+      todo: { required: false as const, placement: 'detail' as const, type: 'keyed-text-list' as const, values: { spec: { label: '仕様の確認', description: '仕様を確かめる' }, split: { description: '分けたい' } } },
+    };
+    const documents = [{ id: documentIdSchema(/.*/u).parse('area'), kind: 'area', title: 'Area', body: '', location: { file: 'area.md', line: 1, column: 1 } }];
+    const codes = (todo: unknown) => validateCaseFields({ belongsTo: 'area', todo }, rules, documents, 'case.ts', { source: 'vitest', layer: 'unit' }).map((item) => item.code);
+    expect(codes([{ spec: '支払日の扱いを確かめる' }, { split: '金額と件数を分ける' }])).toEqual([]);
+    expect(codes([{ bug: '固定している' }])).toEqual(['TM123']);
+    expect(codes(['種類のない文'])).toEqual(['TM135']);
+    expect(codes([{ spec: 'a', split: 'b' }])).toEqual(['TM135']);
+    expect(codes([{ spec: '' }])).toEqual(['TM135']);
+  });
+
   it('requires a field when the condition matches any value listed in requiredWhen.in', () => {
     const rules = {
       belongsTo: { required: true as const, placement: 'classification' as const, type: 'reference' as const, targetKinds: ['area'] },
