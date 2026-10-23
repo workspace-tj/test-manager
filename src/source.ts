@@ -72,6 +72,17 @@ const immediateComment = (node: t.Node): Comment | undefined => {
   return comment;
 };
 
+// `@case-ignore <reason>` keeps a test out of management (setup-only tests, fixture checks); the reason says why.
+const ignoreMarker = (comment: Comment | undefined): Readonly<{ found: boolean; reason?: string; line?: number }> => {
+  if (!comment) return { found: false };
+  const lines = commentLines(comment);
+  const index = lines.findIndex((line) => line.trim().length > 0);
+  const match = index < 0 ? null : /^@case-ignore(?:\s+(.*))?$/u.exec(lines[index]?.trim() ?? '');
+  if (!match) return { found: false };
+  const reason = [match[1] ?? '', ...lines.slice(index + 1)].join(' ').trim();
+  return { found: true, ...(reason ? { reason } : {}), line: (comment.loc?.start.line ?? 1) + index };
+};
+
 const hasLegacyStoryId = (story: t.ObjectExpression): boolean => {
   const parameters = objectProperty(story, 'parameters')?.value;
   if (!t.isObjectExpression(parameters)) return false;
@@ -140,6 +151,7 @@ export const readTestSource = async (
     const isRunnerModule = runnerModuleMatcher(adapter.defaultModule, rules.runners?.[kind]?.testModules ?? [], relative);
     const detailKeys = Object.entries(rules.case.fields).filter(([, rule]) => rule.placement === 'detail').map(([key]) => key);
     const classificationKeys = Object.entries(rules.case.fields).filter(([, rule]) => rule.placement === 'classification').map(([key]) => key);
+    const reasonlessMarkers = new Set<number>();
     traverse(parsed.ast, {
       CallExpression(callPath: NodePath<t.CallExpression>) {
         const call = callPath.node;
@@ -150,8 +162,28 @@ export const readTestSource = async (
           if (unsupported.found) diagnostics.push(diagnostic('TM203', relative, 'declaration', 'marked declaration uses an unsupported runner syntax or wrapper', call.loc?.start.line ?? 1));
           return;
         }
-        const title = stringValue(call.arguments[0]);
+        const commentNode = t.isExpressionStatement(callPath.parent) ? callPath.parent : call;
         const line = call.loc?.start.line ?? 1;
+        // A marker on an enclosing statement (a describe, a loop, a forEach call) leaves out every test inside it.
+        const enclosing: t.Node[] = [commentNode];
+        callPath.findParent((parent) => {
+          if (parent.isStatement()) enclosing.push(parent.node);
+          return false;
+        });
+        const ignored = enclosing.map((node) => ignoreMarker(immediateComment(node))).find((marker) => marker.found);
+        if (ignored) {
+          const markerLine = ignored.line ?? line;
+          if (!ignored.reason && !reasonlessMarkers.has(markerLine)) {
+            reasonlessMarkers.add(markerLine);
+            diagnostics.push(diagnostic('TM214', relative, 'declaration', '@case-ignore needs a reason, e.g. `@case-ignore fixture check only`', markerLine));
+          }
+          // A test that also carries @case was meant to be managed, so dropping it quietly would hide it.
+          if (markerYaml(immediateComment(commentNode), '@case', relative, Object.keys(rules.case.fields), 'TM207').found) {
+            diagnostics.push(diagnostic('TM215', relative, 'declaration', 'test marked @case is inside a @case-ignore block', line));
+          }
+          return;
+        }
+        const title = stringValue(call.arguments[0]);
         if (!title) {
           diagnostics.push(diagnostic('TM202', relative, 'title', 'managed test title must be a static string', line));
           return;
@@ -159,7 +191,6 @@ export const readTestSource = async (
         // A table that cannot be read as values is kept as its source text, so the case still lists what it varies.
         const parametersSource = shape.dynamicEach && shape.tableRange ? source.slice(shape.tableRange.start, shape.tableRange.end).replace(/\r\n?/gu, '\n') : undefined;
         if (shape.dynamicEach && parametersSource === undefined) diagnostics.push(diagnostic('TM203', relative, title, 'each table could not be located', line));
-        const commentNode = t.isExpressionStatement(callPath.parent) ? callPath.parent : call;
         const before = markerYaml(immediateComment(commentNode), '@case', relative, classificationKeys, 'TM207');
         diagnostics.push(...before.diagnostics);
         if (!before.found) diagnostics.push(diagnostic('TM204', relative, title, 'managed test requires an immediately preceding @case comment', line));

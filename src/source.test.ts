@@ -227,6 +227,20 @@ describe('unsupported source syntax', () => {
     expect(result.cases[0]?.details).toEqual({ preconditions: ['signed in'] });
   });
 
+  it('leaves tests marked @case-ignore out of management, and asks for the reason', async () => {
+    const loaded = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
+    if (!loaded.rules) return;
+    const root = await mkdtemp(path.join(tmpdir(), 'test-manager-case-ignore-'));
+    const file = path.join(root, 'ignored.test.ts');
+    await writeFile(file, `import { it } from 'vitest';\n// @case-ignore fixture check only\nit('the fixture has two orders', () => {});\n/**\n * @case-ignore\n * cleans up the shared tenant\n */\nit.each([1, 2])('cleanup %s', () => {});\n// @case-ignore titles come from a loop\nfor (const name of ['a']) it(\`loop \${name}\`, () => {});\n`, 'utf8');
+    const result = await readTestSource(file, root, 'vitest', 'unit', loaded.rules, []);
+    expect(result).toEqual({ cases: [], diagnostics: [] });
+    await writeFile(file, `import { describe, it } from 'vitest';\n/*\n@case-ignore setup only\n*/\ndescribe('setup', () => {\n  for (const a of [1]) for (const b of [2]) it(\`x\${a}\${b}\`, () => {});\n  it('y', () => {});\n});\n// @case-ignore made from a table\n[1, 2].forEach((n) => it(\`n\${n}\`, () => {}));\n`, 'utf8');
+    expect(await readTestSource(file, root, 'vitest', 'unit', loaded.rules, [])).toEqual({ cases: [], diagnostics: [] });
+    await writeFile(file, `import { it } from 'vitest';\n// @case-ignore\nfor (const n of [1]) {\n  it(\`a\${n}\`, () => {});\n  it(\`b\${n}\`, () => {});\n}\n// @case-ignore a reason\nfor (const n of [1]) {\n  /*\n  @case\n  belongsTo: orders\n  role: product\n  impact: 1\n  */\n  it('managed', { meta: { caseId: 'CASE-998' } }, () => {});\n}\n`, 'utf8');
+    expect((await readTestSource(file, root, 'vitest', 'unit', loaded.rules, [])).diagnostics.map((item) => [item.code, item.location.line])).toEqual([['TM214', 2], ['TM215', 15]]);
+  });
+
   it('diagnoses marked wrappers, namespace calls, and Story factories instead of silently dropping them', async () => {
     const loaded = await loadRules(path.resolve('fixtures/valid/test-manager.yaml'));
     if (!loaded.rules) return;
