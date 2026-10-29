@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { documentIdSchema } from './ids.js';
 import type { Diagnostic, KnowledgeDocument, ProjectRules } from './model.js';
 import { diagnostic, location } from './diagnostics.js';
-import { parseStrictYaml, yamlPathLine } from './yaml.js';
+import { parseStrictYaml } from './yaml.js';
 
 export const readKnowledgeDocument = async (
   file: string,
@@ -33,7 +33,7 @@ export const readKnowledgeDocument = async (
       const code = item.code === 'unrecognized_keys' ? 'TM102' : codes[String(item.path[0])] ?? 'TM101';
       const unknownKey = item.code === 'unrecognized_keys' ? item.keys[0] : undefined;
       const diagnosticPath = [...item.path, ...(unknownKey ? [unknownKey] : [])];
-      return diagnostic(code, relative, diagnosticPath.join('.') || subject, item.message, yamlPathLine(match[1] ?? '', diagnosticPath, 1));
+      return diagnostic(code, relative, diagnosticPath.join('.') || subject, item.message, parsed.lineAt(diagnosticPath, 1));
     }) };
   }
   const document: KnowledgeDocument = {
@@ -44,7 +44,7 @@ export const readKnowledgeDocument = async (
       ...(result.data.refs ? { refs: result.data.refs } : {}),
       body: match[2] ?? '',
       location: location(relative),
-      fieldLocations: Object.fromEntries(['id', 'kind', 'title', 'parent', 'refs'].map((field) => [field, location(relative, yamlPathLine(match[1] ?? '', [field], 1), 1)])),
+      fieldLocations: Object.fromEntries(['id', 'kind', 'title', 'parent', 'refs'].map((field) => [field, location(relative, parsed.lineAt([field], 1), 1)])),
   };
   return { document, diagnostics: [] };
 };

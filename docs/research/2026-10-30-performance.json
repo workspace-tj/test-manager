@@ -1,0 +1,488 @@
+{
+  "question": "Reduce full static catalog validation and generation time without narrowing discovery or changing catalog/site content",
+  "measuredDate": "2026-10-29/2026-10-30 Asia/Tokyo",
+  "standaloneBase": "af6d93c",
+  "consumerCommit": "431baab275792317b48a4fb297c81075a7792ebc",
+  "environment": {
+    "cpu": "Apple M4",
+    "logicalCores": 10,
+    "memoryGiB": 32,
+    "os": "macOS arm64",
+    "node": "v24.22.0"
+  },
+  "conditions": [
+    "Built CLI, distinct Node processes, serial execution",
+    "Installation and TypeScript compilation excluded",
+    "No OS cache flush",
+    "check x3, audit x1, build x1 per variant",
+    "CLI build measurements replace an existing owned site with identical file count",
+    "Phase measurements are separate instrumented runs and each writes a fresh site",
+    "Audit wrapper changes only core import/dependency resolution, independent discovery-audit implementation and root inputs unchanged",
+    "Temporary consumer copy retains Node/RuleTester/custom fixture/conditional status/snapshot extensions",
+    "Exploratory first measurements excluded from final comparison"
+  ],
+  "baseline": [
+    {
+      "name": "check-1",
+      "seconds": 19.627916792,
+      "exitCode": 0,
+      "stdout": "check passed: 446 document(s), 37055 case(s)\n",
+      "stderr": ""
+    },
+    {
+      "name": "check-2",
+      "seconds": 18.052902125,
+      "exitCode": 0,
+      "stdout": "check passed: 446 document(s), 37055 case(s)\n",
+      "stderr": ""
+    },
+    {
+      "name": "check-3",
+      "seconds": 18.643491,
+      "exitCode": 0,
+      "stdout": "check passed: 446 document(s), 37055 case(s)\n",
+      "stderr": ""
+    },
+    {
+      "name": "audit",
+      "seconds": 22.396138250000003,
+      "exitCode": 0,
+      "stdout": "登録漏れなし: 3673 ファイル、36561 宣言、理由付き除外 5 件\n",
+      "stderr": ""
+    },
+    {
+      "name": "build",
+      "seconds": 26.265867958,
+      "exitCode": 0,
+      "stdout": "build passed: /tmp/tm-performance-work/baseline-site\n",
+      "stderr": ""
+    }
+  ],
+  "candidate": [
+    {
+      "name": "check-1",
+      "seconds": 7.949481791999999,
+      "exitCode": 0,
+      "stdout": "check passed: 446 document(s), 37055 case(s)\n",
+      "stderr": ""
+    },
+    {
+      "name": "check-2",
+      "seconds": 8.496857124999998,
+      "exitCode": 0,
+      "stdout": "check passed: 446 document(s), 37055 case(s)\n",
+      "stderr": ""
+    },
+    {
+      "name": "check-3",
+      "seconds": 7.692590709,
+      "exitCode": 0,
+      "stdout": "check passed: 446 document(s), 37055 case(s)\n",
+      "stderr": ""
+    },
+    {
+      "name": "audit",
+      "seconds": 11.261687708999998,
+      "exitCode": 0,
+      "stdout": "登録漏れなし: 3673 ファイル、36561 宣言、理由付き除外 5 件\n",
+      "stderr": ""
+    },
+    {
+      "name": "build",
+      "seconds": 16.994976125,
+      "exitCode": 0,
+      "stdout": "build passed: /tmp/tm-performance-work/candidate-site\n",
+      "stderr": ""
+    }
+  ],
+  "comparison": {
+    "check": {
+      "baselineSeconds": 18.643491,
+      "candidateSeconds": 7.949481791999999,
+      "reductionPercent": 57.360551240108414
+    },
+    "audit": {
+      "baselineSeconds": 22.396138250000003,
+      "candidateSeconds": 11.261687708999998,
+      "reductionPercent": 49.715939492381025
+    },
+    "build": {
+      "baselineSeconds": 26.265867958,
+      "candidateSeconds": 16.994976125,
+      "reductionPercent": 35.29634675627117
+    }
+  },
+  "phases": {
+    "baseline": {
+      "variant": "baseline",
+      "phases": [
+        {
+          "name": "rules",
+          "ms": 121.84375
+        },
+        {
+          "name": "discovery",
+          "ms": 836.891208
+        },
+        {
+          "name": "documents",
+          "ms": 162.43604200000004
+        },
+        {
+          "name": "manual",
+          "ms": 221.01987499999996
+        },
+        {
+          "name": "sources",
+          "ms": 18657.92325
+        },
+        {
+          "name": "validation",
+          "ms": 14.622749999998632
+        }
+      ],
+      "renderMs": 1963.6013749999984,
+      "writeMs": 9571.193917,
+      "peakRssMiB": 1933.921875,
+      "files": 37511,
+      "bytes": 277686744
+    },
+    "candidate": {
+      "variant": "candidate",
+      "phases": [
+        {
+          "name": "rules",
+          "ms": 47.544083
+        },
+        {
+          "name": "discovery",
+          "ms": 406.76812500000005
+        },
+        {
+          "name": "documents",
+          "ms": 74.38916699999993
+        },
+        {
+          "name": "manual",
+          "ms": 224.95720800000004
+        },
+        {
+          "name": "sources",
+          "ms": 8241.036459
+        },
+        {
+          "name": "validation",
+          "ms": 26.520124999999098
+        }
+      ],
+      "renderMs": 3075.0559169999997,
+      "writeMs": 6476.213749999999,
+      "peakRssMiB": 1789.84375,
+      "files": 37511,
+      "bytes": 277686744
+    },
+    "note": "Single samples with I/O and runtime variation; phases are sequential wall time, peak RSS covers check+render+write. Do not add phase profile values to normal CLI times."
+  },
+  "cpuProfile": {
+    "selfMs": [
+      [
+        "(garbage collector) :0",
+        2224
+      ],
+      [
+        "compile core/doc.js:32",
+        1020
+      ],
+      [
+        "init core/core.js:50",
+        996
+      ],
+      [
+        "RegExp: \\r?\\n :0",
+        712
+      ],
+      [
+        "write core/doc.js:18",
+        702
+      ],
+      [
+        "next parse/parser.js:176",
+        591
+      ],
+      [
+        "mergeDefs core/util.js:168",
+        501
+      ],
+      [
+        "parseCaseFields dist/case-fields.js:61",
+        454
+      ],
+      [
+        "CallExpression dist/source.js:182",
+        435
+      ],
+      [
+        "_traverse lib/index.js:690",
+        365
+      ],
+      [
+        "get core/util.js:804",
+        315
+      ],
+      [
+        "own core/util.js:734",
+        254
+      ],
+      [
+        "settle core/memoizer.js:169",
+        244
+      ],
+      [
+        "(program) :0",
+        240
+      ],
+      [
+        "parseDocument parse/lexer.js:319",
+        229
+      ],
+      [
+        "_visitPaths lib/index.js:72",
+        221
+      ],
+      [
+        "get lib/index.js:4577",
+        212
+      ],
+      [
+        "traverseNode lib/index.js:135",
+        202
+      ],
+      [
+        "(idle) :0",
+        199
+      ],
+      [
+        "isRecursive core/memoizer.js:25",
+        191
+      ],
+      [
+        "foldLines compose/resolve-flow-scalar.js:76",
+        185
+      ],
+      [
+        "_visit lib/index.js:108",
+        177
+      ],
+      [
+        "generateFastpass core/schemas.js:1045",
+        171
+      ],
+      [
+        "setScope lib/index.js:4796",
+        161
+      ],
+      [
+        " core/doc.js:26",
+        155
+      ],
+      [
+        "parsePlainScalar parse/lexer.js:572",
+        137
+      ],
+      [
+        "parse parse/parser.js:165",
+        124
+      ],
+      [
+        "inst._zod.parse core/schemas.js:1152",
+        115
+      ],
+      [
+        "parseNext parse/lexer.js:225",
+        110
+      ],
+      [
+        "shape core/memoizer.js:42",
+        108
+      ]
+    ],
+    "inclusiveMs": [
+      [
+        "readTestSource",
+        14299
+      ],
+      [
+        "CallExpression",
+        10656
+      ],
+      [
+        "markerYaml",
+        4556
+      ],
+      [
+        "parseCaseFields",
+        4528
+      ],
+      [
+        "parseDocument",
+        2821
+      ],
+      [
+        "compose",
+        2776
+      ],
+      [
+        "",
+        2489
+      ],
+      [
+        "yamlPathLine",
+        2035
+      ],
+      [
+        "next",
+        1799
+      ],
+      [
+        "parse",
+        1797
+      ],
+      [
+        "parseSource",
+        1286
+      ],
+      [
+        "schemaFor",
+        1277
+      ],
+      [
+        "composeDoc",
+        926
+      ],
+      [
+        "parseStrictYaml",
+        840
+      ],
+      [
+        "lex",
+        808
+      ],
+      [
+        "composeNode",
+        790
+      ],
+      [
+        "composeCollection",
+        787
+      ],
+      [
+        "resolveCollection",
+        784
+      ],
+      [
+        "resolveBlockMap",
+        780
+      ],
+      [
+        "parseNext",
+        712
+      ],
+      [
+        "composeScalar",
+        498
+      ],
+      [
+        "documentIdSchema",
+        439
+      ],
+      [
+        "step",
+        250
+      ],
+      [
+        "resolveFlowScalar",
+        225
+      ],
+      [
+        "plainValue",
+        202
+      ],
+      [
+        "foldLines",
+        200
+      ],
+      [
+        "parsePlainScalar",
+        197
+      ],
+      [
+        "readManualCase",
+        155
+      ],
+      [
+        "caseIdSchema",
+        142
+      ],
+      [
+        "NodeBase",
+        106
+      ]
+    ]
+  },
+  "equivalence": {
+    "files": 37511,
+    "bytes": 277686744,
+    "differentPaths": 0,
+    "differentHashes": 0,
+    "fixtureChecks": [
+      {
+        "name": "valid",
+        "ok": true,
+        "diagnostics": 0
+      },
+      {
+        "name": "invalid",
+        "ok": false,
+        "diagnostics": 3
+      },
+      {
+        "name": "quality-dashboard",
+        "ok": true,
+        "diagnostics": 0
+      }
+    ]
+  },
+  "validation": {
+    "standalone": {
+      "build": true,
+      "typecheck": true,
+      "unitFiles": 35,
+      "unitTests": 237,
+      "e2eTests": 12
+    },
+    "consumerOverlay": {
+      "typecheck": true,
+      "unitFiles": 33,
+      "unitTests": 242
+    },
+    "review": "Independent read-only reviewer, no findings. Execution evidence supplied by primary agent.",
+    "consumerSourceUnchanged": true,
+    "gitDiffCheck": true
+  },
+  "sourceSha256": {
+    "src/case-fields.ts": "c99cd4afd7407d2bb62ba932c3866154ac73fab3b5610b666970a90470d7385c",
+    "src/documents.ts": "940a00c32433aaccd1c58c9e8a11877467e04e6876728dfbf344f3426b1a16a1",
+    "src/managed-output.ts": "5ddd251702ed7fb52750669a2fcd653f8cf733ea7aca9859c4889ca791aae25f",
+    "src/source.ts": "b6c5e73fa7081227f5e15546bf39cbbf9f07e67c4a54d21235e09029bc3661a8",
+    "src/yaml.ts": "ab762e0072785614d72d6faf26dc0c2b485a3d258c44661c66b57816b02b2545",
+    "src/case-fields.test.ts": "abe67d121d3820aa3cc5dfbb7d9da807db5571b93fab70c759ba635907364111",
+    "src/yaml.test.ts": "5e3c7f7c2b3e37e03ee684e80efd5e32579b2ac8f8b5e30dcc669ac310567cba"
+  },
+  "limitations": [
+    "No consumer workflow changes or CI rerun",
+    "No cold-cache or other-machine measurements",
+    "No file count or output size reduction",
+    "Audit/build and memory/phase values are single samples",
+    "Directory mkdir reuse contribution is not independently established"
+  ]
+}
