@@ -4,17 +4,15 @@ import { parse, type ParserPlugin } from '@babel/parser';
 import traverseModule from '@babel/traverse';
 import * as t from '@babel/types';
 import type { NodePath } from '@babel/traverse';
-import { z } from 'zod';
 import { caseIdSchema } from './ids.js';
-import { parseCaseFields, partitionCaseFields } from './case-fields.js';
+import { createCaseFieldParser, partitionCaseFields } from './case-fields.js';
 import type { Diagnostic, KnowledgeDocument, Location, ManagedCase, ProjectRules, SourceKind } from './model.js';
 import { diagnostic, location } from './diagnostics.js';
 import { ambiguousObject, objectProperty, stringValue } from './source-ast.js';
 import { runnerSourceAdapter, type RunnerModuleMatcher } from './source-runner-adapters.js';
 import { collectPlaywrightTags, fieldsFromTags, tagFieldNames } from './playwright-tags.js';
 import { storybookDeclarations } from './source-storybook-adapter.js';
-import { isRecord, parseStrictYaml } from './yaml.js';
-import { yamlPathLine } from './yaml.js';
+import { isRecord, parseStrictYaml, unknownKeys } from './yaml.js';
 
 type Comment = t.CommentBlock | t.CommentLine;
 
@@ -47,22 +45,16 @@ const markerYaml = (
     };
   }
   if (!isRecord(parsed.value)) return { found: true, location: markerLocation, diagnostics: [diagnostic('TM201', file, marker, 'comment body must be a YAML mapping', markerLine)] };
-  const shape: Record<string, z.ZodType> = {};
-  for (const key of allowedKeys) shape[key] = z.unknown().optional();
-  const placement = z.strictObject(shape).safeParse(parsed.value);
-  if (!placement.success) {
+  const [unknownKey] = unknownKeys(parsed.value, allowedKeys);
+  if (unknownKey !== undefined) {
     return {
       found: true,
       location: markerLocation,
-      diagnostics: placement.error.issues.map((item) => {
-        const key = item.code === 'unrecognized_keys' ? item.keys[0] : item.path[0];
-        const subject = String(key ?? marker);
-        return diagnostic(placementCode, file, subject, `${String(key ?? 'field')} is not allowed in ${marker}`, markerLine + yamlPathLine(yamlSource, [subject]));
-      }),
+      diagnostics: [diagnostic(placementCode, file, unknownKey, `${unknownKey} is not allowed in ${marker}`, markerLine + parsed.lineAt([unknownKey]))],
     };
   }
-  const fieldLocations = Object.fromEntries(Object.keys(placement.data).map((key) => [key, location(file, markerLine + yamlPathLine(yamlSource, [key]), 1)]));
-  return { found: true, value: placement.data, location: markerLocation, fieldLocations, diagnostics: [] };
+  const fieldLocations = Object.fromEntries(Object.keys(parsed.value).map((key) => [key, location(file, markerLine + parsed.lineAt([key]), 1)]));
+  return { found: true, value: parsed.value, location: markerLocation, fieldLocations, diagnostics: [] };
 };
 
 const immediateComment = (node: t.Node): Comment | undefined => {
@@ -142,8 +134,11 @@ export const readTestSource = async (
 ): Promise<Readonly<{ cases: ReadonlyArray<ManagedCase>; diagnostics: ReadonlyArray<Diagnostic> }>> => {
   const relative = path.relative(projectRoot, file);
   const source = await readFile(file, 'utf8');
+  const sourceLines = source.split(/\r?\n/u);
   const parsed = parseSource(source, relative);
   if (!parsed.ast) return { cases: [], diagnostics: parsed.diagnostics };
+  const idSchema = caseIdSchema(new RegExp(rules.idPattern));
+  const parseFields = createCaseFieldParser({ source: kind, layer }, rules.case.fields, documents, new RegExp(rules.idPattern));
   const cases: ManagedCase[] = [];
   const diagnostics: Diagnostic[] = [...parsed.diagnostics];
   if (kind !== 'storybook') {
@@ -201,7 +196,7 @@ export const readTestSource = async (
         if (extractedId.invalidMultiplicity) diagnostics.push(diagnostic('TM209', relative, title, 'a declaration must contain exactly one current case ID field', line));
         if (extractedId.unsupportedShape) diagnostics.push(diagnostic('TM210', relative, title, 'case ID metadata must not use spreads or computed properties', line));
         if (!rawId) diagnostics.push(diagnostic('TM205', relative, title, adapter.idRequirement, line));
-        const id = caseIdSchema(new RegExp(rules.idPattern)).safeParse(rawId);
+        const id = idSchema.safeParse(rawId);
         if (rawId && !id.success) diagnostics.push(diagnostic('TM206', relative, rawId, 'case ID does not match idPattern', line));
         let tagged: Readonly<Record<string, string>> = {};
         let tagProblem = false;
@@ -217,14 +212,14 @@ export const readTestSource = async (
           tagged = fromTags.values;
         }
         if (!before.value || (details.found && !details.value) || !id.success || (shape.dynamicEach && parametersSource === undefined) || extractedId.invalidMultiplicity || extractedId.unsupportedShape || tagProblem) return;
-        const fields = parseCaseFields({ ...before.value, ...tagged, ...details.value }, { source: kind, layer }, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
+        const fields = parseFields({ ...before.value, ...tagged, ...details.value }, relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
         if (!fields.ok) {
           diagnostics.push(...fields.diagnostics);
           return;
         }
         const endLine = call.loc?.end.line ?? line;
         const separated = partitionCaseFields(fields.fields, rules.case.fields);
-        const base = { id: id.data, title, layer, fields: separated.classification, details: separated.details, location: location(relative, line), snippet: source.split(/\r?\n/u).slice(line - 1, endLine).join('\n') };
+        const base = { id: id.data, title, layer, fields: separated.classification, details: separated.details, location: location(relative, line), snippet: sourceLines.slice(line - 1, endLine).join('\n') };
         if (kind === 'vitest') cases.push({ ...base, source: 'vitest', status: runnerSourceAdapter('vitest').status(shape.name), ...(shape.parameters ? { parameters: shape.parameters } : {}), ...(parametersSource !== undefined ? { parametersSource } : {}) });
         else cases.push({ ...base, source: 'playwright', status: runnerSourceAdapter('playwright').status(shape.name) });
       },
@@ -263,10 +258,10 @@ export const readTestSource = async (
           const details = markerYaml(firstProperty ? immediateComment(firstProperty) : undefined, '@case-doc', relative, detailKeys, 'TM208');
           diagnostics.push(...details.diagnostics);
           const rawId = nameMatch[1] ?? '';
-          const id = caseIdSchema(new RegExp(rules.idPattern)).safeParse(rawId);
+          const id = idSchema.safeParse(rawId);
           if (!id.success) diagnostics.push(diagnostic('TM206', relative, rawId, 'case ID does not match idPattern', variable.loc?.start.line ?? 1));
           if (!before.value || (details.found && !details.value) || !id.success || hasLegacyStoryId(variable.init) || ambiguous) continue;
-          const fields = parseCaseFields({ ...before.value, ...details.value }, { source: kind, layer }, rules.case.fields, documents, new RegExp(rules.idPattern), relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
+          const fields = parseFields({ ...before.value, ...details.value }, relative, before.location, { ...markerFieldLocations(before), ...markerFieldLocations(details) });
           if (!fields.ok) {
             diagnostics.push(...fields.diagnostics);
             continue;
@@ -274,7 +269,7 @@ export const readTestSource = async (
           const tags = objectProperty(variable.init, 'tags')?.value;
           const skipped = t.isArrayExpression(tags) && tags.elements.some((tag) => stringValue(tag) === 'skip-test');
           const separated = partitionCaseFields(fields.fields, rules.case.fields);
-          cases.push({ id: id.data, title: nameMatch[2] ?? rawName, layer, source: 'storybook', status: skipped ? 'skip' : 'active', fields: separated.classification, details: separated.details, location: location(relative, variable.loc?.start.line ?? 1), snippet: source.split(/\r?\n/u).slice((variable.loc?.start.line ?? 1) - 1, variable.loc?.end.line ?? variable.loc?.start.line ?? 1).join('\n') });
+          cases.push({ id: id.data, title: nameMatch[2] ?? rawName, layer, source: 'storybook', status: skipped ? 'skip' : 'active', fields: separated.classification, details: separated.details, location: location(relative, variable.loc?.start.line ?? 1), snippet: sourceLines.slice((variable.loc?.start.line ?? 1) - 1, variable.loc?.end.line ?? variable.loc?.start.line ?? 1).join('\n') });
     }
   }
   return { cases, diagnostics };

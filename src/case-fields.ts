@@ -60,20 +60,15 @@ const diagnosticCode = (item: z.core.$ZodIssue): string => {
 
 const diagnosticReason = (item: z.core.$ZodIssue): string => item.message.replace(/^TM\d+\s/u, '');
 
-export const parseCaseFields = (
-  input: unknown,
+export const createCaseFieldParser = (
   origin: Readonly<{ source: CaseSource; layer: string }>,
   rules: Readonly<Record<string, FieldRule>>,
   documents: ReadonlyArray<KnowledgeDocument>,
   idPattern: RegExp,
-  file: string,
-  baseLocation?: Location,
-  fieldLocations?: Readonly<Record<string, Location>>,
-): ParsedCaseFields => {
-  const at = (code: string, subject: string, reason: string): Diagnostic => {
-    const fieldLocation = fieldLocations?.[subject.split('.')[0] ?? ''] ?? baseLocation;
-    return diagnostic(code, file, subject, reason, fieldLocation?.line ?? 1, fieldLocation?.column ?? 1);
-  };
+) => {
+  const referenceSchema = documentIdSchema(idPattern);
+  const refsSchema = z.array(referenceSchema);
+  const knownDocuments = new Map(documents.map((document) => [document.id, document]));
   const shape: Record<string, z.ZodType> = {};
   for (const [name, rule] of Object.entries(rules)) shape[name] = rule.required ? schemaFor(rule, idPattern) : schemaFor(rule, idPattern).optional();
   const schema = z.strictObject(shape).superRefine((fields, context) => {
@@ -87,40 +82,61 @@ export const parseCaseFields = (
       }
     }
   });
-  const parsed = schema.safeParse(input, { reportInput: true });
-  if (!parsed.success) {
-    return { ok: false, diagnostics: parsed.error.issues.map((item) => at(diagnosticCode(item), item.path.join('.') || 'case', diagnosticReason(item))) };
-  }
-  const belongsTo = documentIdSchema(idPattern).safeParse(parsed.data.belongsTo);
-  if (!belongsTo.success) return { ok: false, diagnostics: [at('TM121', 'belongsTo', 'belongsTo must be configured as a required reference field')] };
-  const refs = parsed.data.refs === undefined ? undefined : z.array(documentIdSchema(idPattern)).safeParse(parsed.data.refs);
-  if (refs !== undefined && !refs.success) return { ok: false, diagnostics: [at('TM122', 'refs', 'refs must be configured as a reference-list field')] };
-  const fields: CaseFields = { ...parsed.data, belongsTo: belongsTo.data, ...(refs?.success ? { refs: refs.data } : {}) };
-  const knownDocuments = new Map(documents.map((document) => [document.id, document]));
-  const diagnostics: Diagnostic[] = [];
-  for (const [name, rule] of Object.entries(rules)) {
-    const value = fields[name];
-    const references = rule.type === 'reference' && typeof value === 'string' ? [value] : rule.type === 'reference-list' && Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
-    for (const reference of references) {
-      const referenceId = documentIdSchema(idPattern).safeParse(reference);
-      if (!referenceId.success) continue;
-      const target = knownDocuments.get(referenceId.data);
-      if (!target) diagnostics.push(at('TM126', name, `reference ${reference} does not exist`));
-      else if ((rule.type === 'reference' || rule.type === 'reference-list') && !rule.targetKinds.includes(target.kind)) diagnostics.push(at('TM127', name, `reference ${reference} has disallowed kind ${target.kind}`));
+  return (
+    input: unknown,
+    file: string,
+    baseLocation?: Location,
+    fieldLocations?: Readonly<Record<string, Location>>,
+  ): ParsedCaseFields => {
+    const at = (code: string, subject: string, reason: string): Diagnostic => {
+      const fieldLocation = fieldLocations?.[subject.split('.')[0] ?? ''] ?? baseLocation;
+      return diagnostic(code, file, subject, reason, fieldLocation?.line ?? 1, fieldLocation?.column ?? 1);
+    };
+    const parsed = schema.safeParse(input, { reportInput: true });
+    if (!parsed.success) {
+      return { ok: false, diagnostics: parsed.error.issues.map((item) => at(diagnosticCode(item), item.path.join('.') || 'case', diagnosticReason(item))) };
     }
-  }
-  // refs names other related documents; the case's own document and its ancestors are already stated by belongsTo.
-  const refsRule = rules.refs;
-  if (refsRule?.type === 'reference-list' && fields.refs) {
-    const implied = new Set<string>();
-    for (let current = knownDocuments.get(fields.belongsTo); current && !implied.has(current.id); current = current.parent ? knownDocuments.get(current.parent) : undefined) implied.add(current.id);
-    for (const reference of new Set(fields.refs)) {
-      const target = knownDocuments.get(reference);
-      if (target && refsRule.targetKinds.includes(target.kind) && implied.has(reference)) diagnostics.push(at('TM128', 'refs', `reference ${reference} is already implied by belongsTo ${fields.belongsTo}`));
+    const belongsTo = referenceSchema.safeParse(parsed.data.belongsTo);
+    if (!belongsTo.success) return { ok: false, diagnostics: [at('TM121', 'belongsTo', 'belongsTo must be configured as a required reference field')] };
+    const refs = parsed.data.refs === undefined ? undefined : refsSchema.safeParse(parsed.data.refs);
+    if (refs !== undefined && !refs.success) return { ok: false, diagnostics: [at('TM122', 'refs', 'refs must be configured as a reference-list field')] };
+    const fields: CaseFields = { ...parsed.data, belongsTo: belongsTo.data, ...(refs?.success ? { refs: refs.data } : {}) };
+    const diagnostics: Diagnostic[] = [];
+    for (const [name, rule] of Object.entries(rules)) {
+      const value = fields[name];
+      const references = rule.type === 'reference' && typeof value === 'string' ? [value] : rule.type === 'reference-list' && Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+      for (const reference of references) {
+        const referenceId = referenceSchema.safeParse(reference);
+        if (!referenceId.success) continue;
+        const target = knownDocuments.get(referenceId.data);
+        if (!target) diagnostics.push(at('TM126', name, `reference ${reference} does not exist`));
+        else if ((rule.type === 'reference' || rule.type === 'reference-list') && !rule.targetKinds.includes(target.kind)) diagnostics.push(at('TM127', name, `reference ${reference} has disallowed kind ${target.kind}`));
+      }
     }
-  }
-  return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, fields };
+    // refs names other related documents; the case's own document and its ancestors are already stated by belongsTo.
+    const refsRule = rules.refs;
+    if (refsRule?.type === 'reference-list' && fields.refs) {
+      const implied = new Set<string>();
+      for (let current = knownDocuments.get(fields.belongsTo); current && !implied.has(current.id); current = current.parent ? knownDocuments.get(current.parent) : undefined) implied.add(current.id);
+      for (const reference of new Set(fields.refs)) {
+        const target = knownDocuments.get(reference);
+        if (target && refsRule.targetKinds.includes(target.kind) && implied.has(reference)) diagnostics.push(at('TM128', 'refs', `reference ${reference} is already implied by belongsTo ${fields.belongsTo}`));
+      }
+    }
+    return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, fields };
+  };
 };
+
+export const parseCaseFields = (
+  input: unknown,
+  origin: Readonly<{ source: CaseSource; layer: string }>,
+  rules: Readonly<Record<string, FieldRule>>,
+  documents: ReadonlyArray<KnowledgeDocument>,
+  idPattern: RegExp,
+  file: string,
+  baseLocation?: Location,
+  fieldLocations?: Readonly<Record<string, Location>>,
+): ParsedCaseFields => createCaseFieldParser(origin, rules, documents, idPattern)(input, file, baseLocation, fieldLocations);
 
 export const validateCaseFields = (
   fields: unknown,

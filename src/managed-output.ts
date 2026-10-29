@@ -44,10 +44,15 @@ export const writeManagedFiles = async (
   let moved = false;
   let backedUp = false;
   try {
+    const directories = new Set<string>();
     for (const [relative, content] of files) {
       const target = path.resolve(temporary, relative);
       if (!isAtOrWithin(temporary, target) || target === temporary) throw new Error(`unsafe generated path: ${relative}`);
-      await mkdir(path.dirname(target), { recursive: true });
+      const directory = path.dirname(target);
+      if (!directories.has(directory)) {
+        await mkdir(directory, { recursive: true });
+        directories.add(directory);
+      }
       await writeFile(target, content, 'utf8');
     }
     await writeFile(path.join(temporary, '.test-manager-output'), markerValue, 'utf8');
